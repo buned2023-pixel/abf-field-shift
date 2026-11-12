@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200" role="img" aria-label="ABF logo mark">
+  <defs><clipPath id="pc"><circle cx="100" cy="100" r="62"/></clipPath></defs>
+  <circle cx="100" cy="100" r="62" fill="#2F4BFF"/>
+  <g clip-path="url(#pc)" fill="none" stroke="#D4F20C" stroke-width="6" stroke-linecap="round">
+    <path d="M30 112 Q100 84 170 112"/>
+    <path d="M30 132 Q100 104 170 132"/>
+    <path d="M30 152 Q100 124 170 152"/>
+  </g>
+  <ellipse cx="100" cy="100" rx="92" ry="30" transform="rotate(-24 100 100)" fill="none" stroke="#F4F6FA" stroke-width="4"/>
+  <circle cx="168" cy="69" r="9" fill="#D4F20C"/>
+</svg>

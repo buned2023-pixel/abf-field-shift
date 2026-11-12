@@ -1,0 +1,1178 @@
+/* Field Shift 3D — Stage 1: 3D terrain map + field drawing */
+(function () {
+  'use strict';
+
+  // ─── Config ────────────────────────────────────────────────────────────────
+  const DUSHANBE = { lat: 38.56, lon: 68.77, name: 'Dushanbe' };
+  const STORE_KEY = 'fieldshift.fields.v1';
+  const FIELD_COLOR = '#D4F20C';   // lime
+  const SELECT_COLOR = '#2F4BFF';  // electric blue
+  const BLOCK_COLOR = '#ff3b4f';
+  const PITCH_3D = 65;
+  const BEARING_3D = -20;
+  const MIN_FIELD_HA = 0.05;
+  const MAX_FIELD_HA = 500;
+  const MOBILE = window.matchMedia('(max-width: 760px), (pointer: coarse)').matches;
+  // Highest Terrarium zoom is 15; phones get 13 to keep frame rate and memory in check
+  const DEM_MAXZOOM = MOBILE ? 13 : 15;
+  // Terrarium DEM (s3.amazonaws.com/elevation-tiles-prod), proxied + cached by our backend
+  const TERRARIUM = `${location.origin}/tiles/terrarium/{z}/{x}/{y}.png`;
+  const ESRI_IMAGERY = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
+  const ESRI_LABELS = 'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}';
+  const SLOPE_CLASSES = [
+    { label: 'Flat <2°', color: '#ffe2b0' },
+    { label: 'Gentle 2–5°', color: '#ffc56b' },
+    { label: 'Moderate 5–15°', color: '#f08a24' },
+    { label: 'Steep >15°', color: '#b4500f' },
+  ];
+  const ASPECT_NAMES = { N: 'North', NE: 'North-east', E: 'East', SE: 'South-east', S: 'South', SW: 'South-west', W: 'West', NW: 'North-west', flat: 'Flat', mixed: 'Mixed' };
+
+  // ─── Helpers ───────────────────────────────────────────────────────────────
+  const $ = (id) => document.getElementById(id);
+  const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const fmt = (n, d = 0) => (n == null || !isFinite(n) ? '–' : Number(n).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d }));
+  const isMobile = () => window.matchMedia('(max-width: 760px)').matches;
+  const uuid = () => (crypto.randomUUID ? crypto.randomUUID() : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0; return (c === 'x' ? r : (r & 0x3) | 0x8).toString(16);
+  }));
+
+  let toastTimer;
+  function toast(msg, isError) {
+    const el = $('toast');
+    el.textContent = msg;
+    el.className = 'toast' + (isError ? ' error' : '');
+    el.hidden = false;
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => { el.hidden = true; }, 3800);
+  }
+  const status = (msg) => { $('statusLine').textContent = msg || ''; };
+  function hint(html) { const el = $('hint'); el.innerHTML = html || ''; el.hidden = !html; }
+
+  async function getJson(url) {
+    const r = await fetch(url);
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok || data.error) throw new Error(data.error || `HTTP ${r.status}`);
+    return data;
+  }
+
+  // ─── Map ───────────────────────────────────────────────────────────────────
+  // Contour lines generated in the browser from the same DEM (maplibre-contour)
+  let contourUrl = null;
+  try {
+    const demSource = new mlcontour.DemSource({ url: TERRARIUM, encoding: 'terrarium', maxzoom: 12, worker: true, cacheSize: MOBILE ? 50 : 100 });
+    demSource.setupMaplibre(maplibregl);
+    contourUrl = demSource.contourProtocolUrl({
+      thresholds: { 11: [100, 500], 12: [100, 500], 13: [100, 500], 14: [100, 500], 15: [100, 500] },
+      elevationKey: 'ele', levelKey: 'level', contourLayer: 'contours',
+    });
+  } catch (err) { console.warn('[contours] unavailable', err); }
+
+  const style = {
+    version: 8,
+    glyphs: 'https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf',
+    sources: {
+      satellite: {
+        type: 'raster', tiles: [ESRI_IMAGERY], tileSize: 256, maxzoom: 19,
+        attribution: 'Imagery &copy; <a href="https://www.esri.com/" target="_blank" rel="noopener">Esri</a>, Maxar, Earthstar Geographics, and the GIS User Community',
+      },
+      labels: { type: 'raster', tiles: [ESRI_LABELS], tileSize: 256, maxzoom: 19 },
+      terrainDem: {
+        type: 'raster-dem', tiles: [TERRARIUM], encoding: 'terrarium', tileSize: 256, maxzoom: DEM_MAXZOOM,
+        attribution: 'Elevation: <a href="https://registry.opendata.aws/terrain-tiles/" target="_blank" rel="noopener">Terrain Tiles (AWS Open Data)</a>',
+      },
+      // Separate DEM source for hillshade (recommended by MapLibre for quality)
+      hillshadeDem: { type: 'raster-dem', tiles: [TERRARIUM], encoding: 'terrarium', tileSize: 256, maxzoom: DEM_MAXZOOM },
+      nodraw: { type: 'geojson', data: { type: 'FeatureCollection', features: [] } },
+      blockedParts: { type: 'geojson', data: { type: 'FeatureCollection', features: [] } },
+      fieldGlow: { type: 'geojson', data: { type: 'FeatureCollection', features: [] } },
+      ...(contourUrl ? { contours: { type: 'vector', tiles: [contourUrl], maxzoom: 15, attribution: 'Contours from Terrarium DEM' } } : {}),
+    },
+    layers: [
+      { id: 'background', type: 'background', paint: { 'background-color': '#0A1020' } },
+      // Gentle colour boost: vivid but still natural
+      { id: 'satellite', type: 'raster', source: 'satellite', paint: { 'raster-saturation': 0.18, 'raster-contrast': 0.12, 'raster-brightness-min': 0.02 } },
+      {
+        // MapLibre has no layer blend modes; shadow-only hillshade (transparent highlights)
+        // darkens slopes like a multiply blend. Lit from 250° = west-south-west afternoon sun.
+        id: 'hillshade', type: 'hillshade', source: 'hillshadeDem',
+        paint: {
+          'hillshade-exaggeration': 0.45,
+          'hillshade-illumination-direction': 250,
+          'hillshade-illumination-anchor': 'map',
+          'hillshade-shadow-color': 'rgba(10, 16, 32, 0.6)',
+          'hillshade-highlight-color': 'rgba(255, 244, 214, 0.08)',
+          'hillshade-accent-color': 'rgba(10, 16, 32, 0.25)',
+        },
+      },
+      ...(contourUrl ? [
+        {
+          id: 'contours', type: 'line', source: 'contours', 'source-layer': 'contours', minzoom: 11,
+          layout: { visibility: 'none', 'line-join': 'round' },
+          paint: {
+            'line-color': 'rgba(255, 255, 255, 0.55)',
+            'line-width': ['match', ['get', 'level'], 1, 1.4, 0.6],
+            'line-opacity': ['match', ['get', 'level'], 1, 0.9, 0.55],
+          },
+        },
+        {
+          id: 'contour-labels', type: 'symbol', source: 'contours', 'source-layer': 'contours', minzoom: 11,
+          filter: ['>', ['get', 'level'], 0],
+          layout: {
+            visibility: 'none', 'symbol-placement': 'line', 'text-size': 11, 'text-font': ['Open Sans Semibold'],
+            'text-field': ['concat', ['number-format', ['get', 'ele'], {}], ' m'], 'text-max-angle': 30,
+          },
+          paint: { 'text-color': '#ffffff', 'text-halo-color': 'rgba(10, 16, 32, 0.85)', 'text-halo-width': 1.4 },
+        },
+      ] : []),
+      { id: 'labels', type: 'raster', source: 'labels', paint: { 'raster-opacity': 0.9 } },
+      // No-draw zones: translucent red + hatch, roads/rivers drawn at their real width
+      { id: 'nodraw-fill', type: 'fill', source: 'nodraw', minzoom: 12, filter: ['==', ['geometry-type'], 'Polygon'], layout: { visibility: 'none' }, paint: { 'fill-color': BLOCK_COLOR, 'fill-opacity': 0.18 } },
+      { id: 'nodraw-hatch', type: 'fill', source: 'nodraw', minzoom: 12, filter: ['==', ['geometry-type'], 'Polygon'], layout: { visibility: 'none' }, paint: { 'fill-pattern': 'hatch', 'fill-opacity': 0.7 } },
+      { id: 'nodraw-outline', type: 'line', source: 'nodraw', minzoom: 12, filter: ['==', ['geometry-type'], 'Polygon'], layout: { visibility: 'none' }, paint: { 'line-color': BLOCK_COLOR, 'line-width': 1, 'line-opacity': 0.8 } },
+      {
+        id: 'nodraw-lines', type: 'line', source: 'nodraw', minzoom: 12, filter: ['==', ['geometry-type'], 'LineString'],
+        layout: { visibility: 'none', 'line-cap': 'round', 'line-join': 'round' },
+        paint: {
+          'line-color': BLOCK_COLOR, 'line-opacity': 0.45,
+          // metres → pixels (≈30 m/px at z12, ≈0.47 m/px at z18 at Tajik latitudes)
+          'line-width': ['interpolate', ['exponential', 2], ['zoom'], 12, ['*', ['get', 'width'], 0.033], 18, ['*', ['get', 'width'], 2.1]],
+        },
+      },
+      // Lime glow under the drawn fields (Terra Draw draws the crisp outline on top)
+      { id: 'field-glow', type: 'line', source: 'fieldGlow', paint: { 'line-color': FIELD_COLOR, 'line-width': 10, 'line-blur': 8, 'line-opacity': 0.55 } },
+      // Blocked parts of the field being checked
+      { id: 'blocked-fill', type: 'fill', source: 'blockedParts', paint: { 'fill-color': BLOCK_COLOR, 'fill-opacity': 0.55 } },
+      { id: 'blocked-line', type: 'line', source: 'blockedParts', paint: { 'line-color': '#ffffff', 'line-width': 1.5, 'line-dasharray': [2, 1.5] } },
+    ],
+    terrain: { source: 'terrainDem', exaggeration: 1.4 },
+    sky: {
+      // Afternoon gradient: deep blue overhead → pale haze at the horizon; fog fades distant terrain
+      'sky-color': '#1d3f9e',
+      'horizon-color': '#bcd2f0',
+      'fog-color': '#c5d3e6',
+      'sky-horizon-blend': 0.75,
+      'horizon-fog-blend': 0.55,
+      'fog-ground-blend': 0.72,
+      'atmosphere-blend': ['interpolate', ['linear'], ['zoom'], 0, 1, 10, 1, 12, 0],
+    },
+    light: { anchor: 'map', position: [1.15, 250, 35], color: '#fff4dc', intensity: 0.45 },
+  };
+
+  const map = new maplibregl.Map({
+    container: 'map',
+    style,
+    center: [DUSHANBE.lon, DUSHANBE.lat],
+    zoom: 11.5,
+    pitch: PITCH_3D,
+    bearing: BEARING_3D,
+    maxPitch: 85,
+    maxZoom: 19,
+    attributionControl: { compact: isMobile() },
+    // Performance on phones: smaller tile cache (and lower DEM zoom, above).
+    // Note: don't override pixelRatio — with 3D terrain, a pixel ratio different from the
+    // screen's makes MapLibre read its terrain depth buffer at the wrong pixel, so clicks land off.
+    maxTileCacheSize: MOBILE ? 60 : null,
+  });
+  // Diagonal red hatch for no-draw zones (registered once the style is ready)
+  function addHatch() {
+    if (map.hasImage('hatch')) return;
+    const s = 12, c = document.createElement('canvas');
+    c.width = c.height = s;
+    const g = c.getContext('2d');
+    g.strokeStyle = BLOCK_COLOR; g.lineWidth = 2;
+    g.beginPath(); g.moveTo(0, s); g.lineTo(s, 0); g.moveTo(-s / 2, s / 2); g.lineTo(s / 2, -s / 2); g.moveTo(s / 2, s * 1.5); g.lineTo(s * 1.5, s / 2); g.stroke();
+    map.addImage('hatch', g.getImageData(0, 0, s, s));
+  }
+  map.addControl(new maplibregl.NavigationControl({ visualizePitch: true, showCompass: true }), 'top-right');
+  map.addControl(new maplibregl.ScaleControl({ unit: 'metric', maxWidth: 120 }), 'bottom-left');
+  map.on('error', (e) => { if (e && e.error) console.warn('[map]', e.error.message); });
+
+  // ─── View controls (2D/3D, exaggeration, layers) ──────────────────────────
+  const view = { is3D: true, exaggeration: 1.4 };
+
+  function set3D(on) {
+    view.is3D = on;
+    $('view3d').classList.toggle('on', on);
+    $('view2d').classList.toggle('on', !on);
+    $('exaggeration').disabled = !on;
+    if (on) {
+      map.setTerrain({ source: 'terrainDem', exaggeration: view.exaggeration });
+      map.easeTo({ pitch: PITCH_3D, bearing: map.getBearing() || BEARING_3D, duration: 900 });
+    } else {
+      map.setTerrain(null);
+      map.easeTo({ pitch: 0, bearing: 0, duration: 900 });
+    }
+  }
+
+  function setLayerVisible(id, on) {
+    if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', on ? 'visible' : 'none');
+  }
+
+  function setFieldsVisible(on) {
+    (map.getStyle().layers || []).forEach((l) => { if (l.id.startsWith('td-')) setLayerVisible(l.id, on); });
+    labels.forEach((m) => { m.getElement().style.display = on ? '' : 'none'; });
+  }
+
+  function bindViewControls() {
+    $('view2d').addEventListener('click', () => set3D(false));
+    $('view3d').addEventListener('click', () => set3D(true));
+    $('exaggeration').addEventListener('input', (e) => {
+      view.exaggeration = parseFloat(e.target.value);
+      $('exagValue').textContent = `${view.exaggeration.toFixed(1)}×`;
+      if (view.is3D) map.setTerrain({ source: 'terrainDem', exaggeration: view.exaggeration });
+    });
+    $('lyrSatellite').addEventListener('change', (e) => setLayerVisible('satellite', e.target.checked));
+    $('lyrHillshade').addEventListener('change', (e) => setLayerVisible('hillshade', e.target.checked));
+    $('lyrLabels').addEventListener('change', (e) => setLayerVisible('labels', e.target.checked));
+    $('lyrFields').addEventListener('change', (e) => setFieldsVisible(e.target.checked));
+    $('lyrContours').addEventListener('change', (e) => { setLayerVisible('contours', e.target.checked); setLayerVisible('contour-labels', e.target.checked); });
+    $('lyrZones').addEventListener('change', () => updateZonesVisibility());
+    if (!contourUrl) { $('lyrContours').disabled = true; $('lyrContours').closest('label').title = 'Contours unavailable'; }
+    document.querySelectorAll('[data-toggle]').forEach((btn) => btn.addEventListener('click', () => {
+      const panel = $(btn.dataset.toggle);
+      const collapsed = panel.classList.toggle('collapsed');
+      btn.setAttribute('aria-expanded', String(!collapsed));
+    }));
+    if (isMobile()) {
+      $('layersPanel').classList.add('collapsed');
+      $('layersPanel').querySelector('.panel-head').setAttribute('aria-expanded', 'false');
+    }
+  }
+
+  // ─── Location & search ─────────────────────────────────────────────────────
+  function flyTo(lon, lat, zoom = 13) {
+    // Smooth, cinematic arc: zooms out a little, travels, then settles into the 3D view
+    map.flyTo({
+      center: [lon, lat], zoom,
+      pitch: view.is3D ? PITCH_3D : 0, bearing: view.is3D ? BEARING_3D : 0,
+      speed: 0.7, curve: 1.5, essential: true,
+      easing: (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2),
+    });
+  }
+
+  function browserLocation() {
+    return new Promise((resolve, reject) => {
+      if (!navigator.geolocation) return reject(new Error('unsupported'));
+      navigator.geolocation.getCurrentPosition(
+        (p) => resolve({ lat: p.coords.latitude, lon: p.coords.longitude }),
+        reject, { enableHighAccuracy: true, timeout: 10000, maximumAge: 300000 }
+      );
+    });
+  }
+
+  async function startLocation() {
+    status('Finding your location…');
+    try {
+      const d = await getJson('/api/location');
+      flyTo(d.lon, d.lat, 12.5);
+      status(`Located by IP: ${[d.city, d.country].filter(Boolean).join(', ')} · approximate, search to refine`);
+      return;
+    } catch (_) { /* fall back to browser geolocation */ }
+    try {
+      const p = await browserLocation();
+      flyTo(p.lon, p.lat, 14);
+      status('Located by device GPS');
+      return;
+    } catch (_) { /* fall back to search */ }
+    status('Showing Dushanbe. Search for your village to move the map.');
+    $('searchInput').focus();
+  }
+
+  async function myLocation() {
+    status('Finding your location…');
+    try {
+      const p = await browserLocation();
+      flyTo(p.lon, p.lat, 15);
+      status('Located by device GPS');
+    } catch (_) {
+      try {
+        const d = await getJson('/api/location');
+        flyTo(d.lon, d.lat, 12.5);
+        status(`Device location unavailable; using IP location: ${d.city || ''}`);
+      } catch (__) {
+        status('Location unavailable. Use the search box.');
+      }
+    }
+  }
+
+  async function doSearch(q) {
+    const list = $('searchResults');
+    if (!q.trim()) { list.hidden = true; return; }
+    list.innerHTML = '<li class="empty">Searching…</li>';
+    list.hidden = false;
+    try {
+      const { results } = await getJson(`/api/geocode?q=${encodeURIComponent(q)}`);
+      if (!results.length) { list.innerHTML = '<li class="empty">No places found</li>'; return; }
+      list.innerHTML = '';
+      results.forEach((r) => {
+        const li = document.createElement('li');
+        li.tabIndex = 0;
+        li.innerHTML = `${esc(r.city)}<small>${esc([r.admin, r.country].filter(Boolean).join(', '))}</small>`;
+        const pick = () => {
+          list.hidden = true;
+          $('searchInput').value = r.city;
+          flyTo(r.lon, r.lat, 13);
+          status(`${r.city}${r.country ? ', ' + r.country : ''}`);
+        };
+        li.addEventListener('click', pick);
+        li.addEventListener('keydown', (e) => { if (e.key === 'Enter') pick(); });
+        list.appendChild(li);
+      });
+    } catch (_) {
+      list.innerHTML = '<li class="empty">Search is unavailable right now</li>';
+    }
+  }
+
+  function bindSearch() {
+    $('searchForm').addEventListener('submit', (e) => { e.preventDefault(); doSearch($('searchInput').value); });
+    document.addEventListener('click', (e) => { if (!$('searchForm').contains(e.target)) $('searchResults').hidden = true; });
+    $('locateBtn').addEventListener('click', myLocation);
+  }
+
+  // ─── Fields (Terra Draw) ───────────────────────────────────────────────────
+  const fields = new Map();  // id → { name, createdAt, geo, terrain, terrainError }
+  const labels = new Map();  // id → maplibregl.Marker
+  let draw = null;
+  let selectedId = null;
+
+  // Shape rules checked the moment a field is closed or an edit is committed
+  function shapeProblem(feature) {
+    if (window.terraDraw.ValidateNotSelfIntersecting(feature).valid === false) return 'The field edges cross each other. Draw the corners in order around the field.';
+    const ha = turf.area(feature) / 10000;
+    if (ha < MIN_FIELD_HA) return `Too small: ${fmt(ha, 3)} ha. A field must be at least ${MIN_FIELD_HA} ha.`;
+    if (ha > MAX_FIELD_HA) return `Too large: ${fmt(ha, 0)} ha. A field can be at most ${MAX_FIELD_HA} ha. Zoom in and draw a smaller field.`;
+    return null;
+  }
+
+  function setupDraw() {
+    const TD = window.terraDraw;
+    // In-progress ("provisional") shapes may cross while the user is still clicking
+    let lastWarned = 0;
+    // 'commit' fires for every corner added (the shape is still open, so its area is ~0):
+    // only crossing edges are checked then. Size limits apply on 'finish' (shape closed);
+    // select-mode edits are size-checked in onFieldEdited.
+    const validation = (feature, ctx) => {
+      const type = ctx && ctx.updateType;
+      if (type === 'provisional') return { valid: true };
+      if (type !== 'finish') {
+        const ok = TD.ValidateNotSelfIntersecting(feature);
+        return ok.valid === false ? ok : { valid: true };
+      }
+      const problem = shapeProblem(feature);
+      if (problem) {
+        if (Date.now() - lastWarned > 1500) { toast(problem, true); lastWarned = Date.now(); }
+        return { valid: false, reason: problem };
+      }
+      return { valid: true };
+    };
+    // Live colour while drawing: red over a no-draw zone, lime/green over allowed land
+    const liveColor = () => (live.state === 'blocked' ? BLOCK_COLOR : live.state === 'allowed' ? '#7CFF6B' : FIELD_COLOR);
+    const polygonMode = new TD.TerraDrawPolygonMode({
+      validation,
+      styles: {
+        fillColor: liveColor, fillOpacity: 0.22, outlineColor: liveColor, outlineWidth: 3,
+        closingPointColor: '#ffffff', closingPointOutlineColor: liveColor, closingPointWidth: 6, closingPointOutlineWidth: 2,
+        editedPointColor: '#ffffff', editedPointOutlineColor: FIELD_COLOR, editedPointWidth: 5,
+      },
+    });
+    const selectMode = new TD.TerraDrawSelectMode({
+      // Terra Draw's own Delete shortcut removed polygons behind the app's back (the list and
+      // storage kept them, so they came back after reload). The app handles Delete itself.
+      keyEvents: { deselect: 'Escape', delete: null, rotate: null, scale: null },
+      flags: {
+        polygon: {
+          feature: {
+            draggable: true,
+            coordinates: { midpoints: true, draggable: true, deletable: true },
+          },
+        },
+      },
+      styles: {
+        selectedPolygonColor: FIELD_COLOR, selectedPolygonFillOpacity: 0.3,
+        selectedPolygonOutlineColor: '#ffffff', selectedPolygonOutlineWidth: 3,
+        selectionPointColor: '#ffffff', selectionPointOutlineColor: SELECT_COLOR, selectionPointWidth: 6, selectionPointOutlineWidth: 2,
+        midPointColor: SELECT_COLOR, midPointOutlineColor: '#ffffff', midPointWidth: 4, midPointOutlineWidth: 1,
+      },
+    });
+
+    draw = new TD.TerraDraw({
+      adapter: new window.terraDrawMaplibreGlAdapter.TerraDrawMapLibreGLAdapter({ map }),
+      modes: [polygonMode, selectMode],
+    });
+    draw.start();
+    draw.setMode('select');
+
+    draw.on('finish', (id, ctx) => {
+      if (ctx && ctx.mode === 'polygon' && ctx.action === 'draw') onFieldDrawn(id);
+      else if (fields.has(id)) onFieldEdited(id); // drag / reshape committed in select mode
+    });
+    draw.on('change', (ids, type) => {
+      if (type === 'update') ids.forEach((id) => { if (fields.has(id)) scheduleRecompute(id); });
+      // Safety net: if a polygon disappears from Terra Draw by any route, drop it from the app too
+      if (type === 'delete') ids.forEach((id) => { if (fields.has(id) && !deleting.has(id)) forgetField(id); });
+    });
+    draw.on('select', (id) => { selectedId = fields.has(id) ? id : null; render(); });
+    draw.on('deselect', () => { selectedId = null; render(); });
+  }
+
+  function featureOf(id) {
+    const f = draw.getSnapshotFeature ? draw.getSnapshotFeature(id) : draw.getSnapshot().find((x) => x.id === id);
+    return f && f.geometry && f.geometry.type === 'Polygon' ? f : null;
+  }
+
+  // ── Stats ──
+  function geometryStats(f) {
+    const centroid = turf.centroid(f).geometry.coordinates;
+    return {
+      areaHa: turf.area(f) / 10000,
+      perimeterKm: turf.length(turf.polygonToLine(f), { units: 'kilometers' }),
+      centroid,
+    };
+  }
+
+  const terrainTokens = new Map();
+  async function computeTerrain(id) {
+    const f = featureOf(id);
+    const field = fields.get(id);
+    if (!f || !field) return;
+    const token = (terrainTokens.get(id) || 0) + 1;
+    terrainTokens.set(id, token);
+    field.terrain = null;
+    field.terrainError = false;
+    render();
+    try {
+      const t = await window.FieldDEM.analyzeTerrain(f);
+      if (terrainTokens.get(id) !== token || !fields.has(id)) return;
+      field.terrain = t;
+    } catch (err) {
+      if (terrainTokens.get(id) !== token) return;
+      console.warn('[terrain]', err);
+      field.terrainError = true;
+    }
+    save();
+    render();
+  }
+
+  function recompute(id) {
+    const f = featureOf(id);
+    const field = fields.get(id);
+    if (!f || !field) return;
+    field.geo = geometryStats(f);
+    updateLabel(id);
+    computeTerrain(id);
+  }
+
+  const recomputeTimers = new Map();
+  function scheduleRecompute(id) {
+    const f = featureOf(id);
+    const field = fields.get(id);
+    if (f && field) { field.geo = geometryStats(f); updateLabel(id); updateGlow(); render(); } // live area while dragging
+    clearTimeout(recomputeTimers.get(id));
+    recomputeTimers.set(id, setTimeout(() => { computeTerrain(id); save(); }, 600));
+  }
+
+  // ── Lifecycle ──
+  function nextName() {
+    let n = fields.size + 1;
+    const names = new Set([...fields.values()].map((f) => f.name));
+    while (names.has(`Field ${n}`)) n++;
+    return `Field ${n}`;
+  }
+
+  function onFieldDrawn(id) {
+    const f = featureOf(id);
+    fields.set(id, { name: nextName(), createdAt: new Date().toISOString(), geo: null, terrain: null, land: { status: 'checking' }, lastGood: f && f.geometry });
+    recompute(id);
+    save();
+    setDrawing(false);
+    draw.selectFeature(id);
+    toast(`${fields.get(id).name}: ${fmt(fields.get(id).geo.areaHa, 2)} ha · checking land type…`);
+    runLandCheck(id, { isNew: true });
+  }
+
+  function onFieldEdited(id) {
+    const field = fields.get(id);
+    const f = featureOf(id);
+    if (!field || !f) return;
+    const problem = shapeProblem(f);
+    if (problem && field.lastGood) {
+      draw.updateFeatureGeometry(id, field.lastGood);
+      recompute(id);
+      save();
+      render();
+      toast(`${problem} The change was undone.`, true);
+      return;
+    }
+    runLandCheck(id, { prevGeometry: field.lastGood });
+  }
+
+  // ── Land check (OpenStreetMap) ──
+  const landParts = new Map(); // id → last report with blocked pieces (for trim + red overlay)
+  const landTokens = new Map();
+  let overlayOwner = null;
+
+  function showBlocked(pieces, ownerId) {
+    overlayOwner = ownerId || null;
+    map.getSource('blockedParts').setData(pieces || { type: 'FeatureCollection', features: [] });
+  }
+  function clearBlocked(ownerId) {
+    if (ownerId === undefined || overlayOwner === ownerId) showBlocked(null, null);
+  }
+
+  const landSummary = (rep) => ({
+    status: rep.status, share: rep.share, classes: rep.classes || [],
+    allowedShare: rep.allowedShare, allowedClasses: rep.allowedClasses || [], checkedAt: new Date().toISOString(),
+  });
+
+  async function runLandCheck(id, { isNew = false, prevGeometry = null } = {}) {
+    const f = featureOf(id);
+    const field = fields.get(id);
+    if (!f || !field) return;
+    const token = (landTokens.get(id) || 0) + 1;
+    landTokens.set(id, token);
+    const prevLand = field.land;
+    field.land = { status: 'checking' };
+    render();
+
+    const rep = await window.FieldLand.checkField(f);
+    if (landTokens.get(id) !== token || !fields.has(id)) return;
+    const pct = rep.share != null ? fmt(rep.share * 100, rep.share < 0.1 ? 1 : 0) : null;
+
+    if (rep.status === 'blocked') {
+      const msg = window.FieldLand.rejectMessage(rep);
+      showBlocked(rep.pieces, id);
+      if (isNew) {
+        // Reject: the field is not kept; the red parts stay visible so the user sees why
+        await removeField(id, { quiet: true });
+        showBlocked(rep.pieces, null);
+        const again = await window.FSDialog.confirm({
+          title: 'Field not allowed here',
+          message: `${msg} (${pct}% of the field is on blocked land, the limit is 5%.)`,
+          okText: 'Draw again', cancelText: 'Close',
+        });
+        if (again) setDrawing(true);
+        return;
+      }
+      if (prevGeometry) {
+        // An edit pushed the field onto blocked land: undo the edit
+        draw.updateFeatureGeometry(id, prevGeometry);
+        field.land = prevLand && prevLand.status !== 'checking' ? prevLand : { status: 'unverified' };
+        recompute(id);
+        save();
+        render();
+        toast(`${msg} The change was undone.`, true);
+        return;
+      }
+      // Imported / restored field: keep it but flag it clearly
+      field.land = landSummary(rep);
+      landParts.set(id, rep);
+      toast(`${field.name}: ${msg}`, true);
+    } else if (rep.status === 'minor') {
+      field.land = landSummary(rep);
+      landParts.set(id, rep);
+      showBlocked(rep.pieces, id);
+      field.lastGood = f.geometry;
+      toast(`${field.name} touches ${window.FieldLand.rejectMessage(rep).replace(/^This field overlaps |\. Move it onto farmland\.$/g, '')} (${pct}%). You can trim it in the Field overview.`);
+    } else if (rep.status === 'ok') {
+      field.land = landSummary(rep);
+      landParts.delete(id);
+      clearBlocked(id);
+      field.lastGood = f.geometry;
+      if (isNew) toast(`${field.name} saved: ${fmt(field.geo.areaHa, 2)} ha on allowed land`);
+    } else {
+      field.land = { status: 'unverified', checkedAt: new Date().toISOString() };
+      field.lastGood = f.geometry;
+      toast('Could not verify land type, check manually.', true);
+    }
+    save();
+    render();
+  }
+
+  async function trimField(id) {
+    const rep = landParts.get(id);
+    const f = featureOf(id);
+    if (!rep || !rep.union || !f) return;
+    const geom = window.FieldLand.trim(f, rep.union);
+    const problem = geom ? shapeProblem({ type: 'Feature', properties: {}, geometry: geom }) : 'Nothing would be left after trimming.';
+    if (problem) { toast(`Can't trim: ${problem}`, true); return; }
+    const before = fields.get(id).geo.areaHa;
+    draw.updateFeatureGeometry(id, geom);
+    recompute(id);
+    clearBlocked(id);
+    const after = fields.get(id).geo.areaHa;
+    toast(`Trimmed ${fmt(before - after, 2)} ha of blocked land. Re-checking…`);
+    runLandCheck(id);
+  }
+
+  // ── Delete ──
+  const deleting = new Set();
+
+  // Remove a field everywhere: map polygon, label, glow, list, overview, storage
+  function forgetField(id) {
+    fields.delete(id);
+    if (labels.has(id)) { labels.get(id).remove(); labels.delete(id); }
+    landParts.delete(id);
+    landTokens.delete(id);
+    terrainTokens.delete(id);
+    clearTimeout(recomputeTimers.get(id));
+    recomputeTimers.delete(id);
+    clearBlocked(id);
+    if (selectedId === id) selectedId = null;
+    save();
+    render();
+  }
+
+  async function removeField(id) {
+    deleting.add(id);
+    try {
+      if (draw.getMode() === 'select') { try { draw.deselectFeature(id); } catch (_) { /* not selected */ } }
+      if (draw.getSnapshotFeature(id)) draw.removeFeatures([id]);
+    } finally {
+      deleting.delete(id);
+    }
+    forgetField(id);
+  }
+
+  async function deleteField(id) {
+    if (!id || !fields.has(id)) return;
+    const name = fields.get(id).name;
+    const ok = await window.FSDialog.confirm({
+      title: 'Delete this field?',
+      message: `"${name}" will be removed from the map and from this browser. Export first if you want a backup.`,
+      okText: 'Delete', cancelText: 'Keep', danger: true,
+    });
+    if (!ok || !fields.has(id)) return;
+    await removeField(id);
+    toast(`${name} deleted`);
+  }
+
+  async function deleteAllFields() {
+    const n = fields.size;
+    if (!n) return;
+    const ok = await window.FSDialog.confirm({
+      title: `Delete all ${n} field${n > 1 ? 's' : ''}?`,
+      message: 'Every field will be removed from the map and from this browser. This cannot be undone.',
+      okText: 'Delete all', cancelText: 'Keep', danger: true,
+    });
+    if (!ok) return;
+    for (const id of [...fields.keys()]) await removeField(id);
+    clearBlocked();
+    toast(`Deleted ${n} field${n > 1 ? 's' : ''}`);
+  }
+
+  async function renameField(id) {
+    const field = fields.get(id);
+    if (!field) return;
+    const v = await window.FSDialog.prompt({ title: 'Rename field', value: field.name, okText: 'Save' });
+    if (!v || !fields.has(id)) return;
+    field.name = v.slice(0, 60);
+    updateLabel(id);
+    save();
+    render();
+  }
+
+  function selectField(id, fly = true) {
+    if (!fields.has(id)) return;
+    if (draw.getMode() !== 'select') setDrawing(false);
+    try { draw.selectFeature(id); } catch (_) { /* already selected */ }
+    selectedId = id;
+    render();
+    if (fly) zoomToField(id);
+  }
+
+  function zoomToField(id) {
+    const f = featureOf(id);
+    if (!f) return;
+    const b = turf.bbox(f);
+    const pad = isMobile() ? { top: 90, bottom: window.innerHeight * 0.5, left: 30, right: 30 } : { top: 80, bottom: 120, left: 290, right: 400 };
+    const cam = map.cameraForBounds([[b[0], b[1]], [b[2], b[3]]], { padding: pad, maxZoom: 17 });
+    // cameraForBounds frames a flat view; a tilted 3D camera needs to back off a little more
+    if (cam) map.easeTo({ ...cam, zoom: Math.min(cam.zoom - (view.is3D ? 0.7 : 0), 17), pitch: view.is3D ? 50 : 0, duration: 1200 });
+  }
+
+  function updateLabel(id) {
+    const field = fields.get(id);
+    if (!field || !field.geo) return;
+    let m = labels.get(id);
+    if (!m) {
+      const el = document.createElement('div');
+      el.className = 'field-label';
+      m = new maplibregl.Marker({ element: el, anchor: 'center' }).setLngLat(field.geo.centroid).addTo(map);
+      if (!$('lyrFields').checked) el.style.display = 'none';
+      labels.set(id, m);
+    }
+    m.setLngLat(field.geo.centroid);
+    m.getElement().textContent = field.name;
+  }
+
+  // ── No-draw zones + live feedback while drawing ──
+  const live = { state: 'unknown', cls: null };
+  const isDrawing = () => !!draw && draw.getMode() === 'polygon';
+
+  function updateZonesVisibility() {
+    const on = $('lyrZones').checked || isDrawing();
+    ['nodraw-fill', 'nodraw-hatch', 'nodraw-outline', 'nodraw-lines'].forEach((l) => setLayerVisible(l, on));
+    if (on) refreshZones();
+  }
+
+  let zonesTimer = null;
+  function refreshZones() {
+    clearTimeout(zonesTimer);
+    zonesTimer = setTimeout(async () => {
+      if (!($('lyrZones').checked || isDrawing())) return;
+      const r = await window.FieldLand.ensureZones(map, (fc) => map.getSource('nodraw').setData(fc));
+      if (isDrawing()) drawingHint(r === 'zoom');
+    }, 400);
+  }
+
+  function drawingHint(needZoom) {
+    hint('Click on the terrain to add corners · click the first point to close the field · <kbd>Esc</kbd> to cancel' +
+      (needZoom ? '<br><span class="hint-sub">Zoom in closer to see red no-draw zones (water, villages, roads)</span>' : ''));
+  }
+
+  function updateCursorTip(e) {
+    const tip = $('cursorTip');
+    if (!isDrawing() || !e) { tip.hidden = true; live.state = 'unknown'; return; }
+    const r = map.getZoom() >= window.FieldLand.MIN_ZONE_ZOOM ? window.FieldLand.hitTest(e.lngLat) : { state: 'unknown' };
+    live.state = r.state; live.cls = r.cls;
+    tip.className = `cursor-tip ${r.state}`;
+    tip.textContent = r.state === 'blocked' ? `✕ No-draw: ${window.FieldLand.SHORT[r.cls] || r.cls}`
+      : r.state === 'allowed' ? '✓ Allowed land' : 'Land type not loaded';
+    tip.style.transform = `translate(${e.point.x + 16}px, ${e.point.y + 16}px)`;
+    tip.hidden = false;
+    map.getCanvas().style.cursor = r.state === 'blocked' ? 'not-allowed' : 'crosshair';
+  }
+
+  // ── Drawing mode ──
+  function setDrawing(on) {
+    if (!draw) return;
+    if (on) {
+      if (selectedId) { try { draw.deselectFeature(selectedId); } catch (_) { /* ignore */ } }
+      draw.setMode('polygon');
+      clearBlocked();
+      drawingHint(map.getZoom() < window.FieldLand.MIN_ZONE_ZOOM);
+    } else {
+      draw.setMode('select');
+      hint('');
+      updateCursorTip(null);
+      map.getCanvas().style.cursor = '';
+    }
+    updateZonesVisibility();
+    $('drawBtn').classList.toggle('active', on);
+    $('drawBtn').querySelector('span').textContent = on ? 'Cancel drawing' : 'Draw my field';
+    $('editBtn').classList.remove('active');
+  }
+
+  function startEdit() {
+    if (!fields.size) { toast('Draw a field first.'); return; }
+    setDrawing(false);
+    if (!selectedId && fields.size === 1) selectField(fields.keys().next().value, false);
+    $('editBtn').classList.add('active');
+    hint(selectedId
+      ? 'Drag a corner to reshape · drag a midpoint to add a corner · right-click a corner to remove it · drag inside to move'
+      : 'Click a field on the map (or in the list) to edit it');
+  }
+
+  // ─── Storage, export, import ───────────────────────────────────────────────
+  function toGeoJSON(forExport) {
+    const features = [];
+    fields.forEach((field, id) => {
+      const f = featureOf(id);
+      if (!f) return;
+      const t = field.terrain;
+      const props = {
+        name: field.name,
+        created_at: field.createdAt,
+        area_ha: field.geo ? +field.geo.areaHa.toFixed(4) : null,
+        perimeter_km: field.geo ? +field.geo.perimeterKm.toFixed(4) : null,
+        centroid_lon: field.geo ? +field.geo.centroid[0].toFixed(6) : null,
+        centroid_lat: field.geo ? +field.geo.centroid[1].toFixed(6) : null,
+        mean_elevation_m: t ? +t.meanElevation.toFixed(1) : null,
+        min_elevation_m: t ? +t.minElevation.toFixed(1) : null,
+        max_elevation_m: t ? +t.maxElevation.toFixed(1) : null,
+        mean_slope_deg: t ? +t.meanSlope.toFixed(2) : null,
+        aspect: t ? t.aspect : null,
+        aspect_deg: t && t.aspectDeg != null ? +t.aspectDeg.toFixed(1) : null,
+        land_status: field.land && field.land.status !== 'checking' ? field.land.status : null,
+        land_blocked_pct: field.land && field.land.share != null ? +(field.land.share * 100).toFixed(2) : null,
+        land_blocked_types: field.land && field.land.classes ? field.land.classes.join(',') : null,
+      };
+      if (!forExport && t) props._terrain = t;
+      if (!forExport && field.land && field.land.status !== 'checking') props._land = field.land;
+      features.push({ type: 'Feature', id, geometry: f.geometry, properties: props });
+    });
+    return { type: 'FeatureCollection', features };
+  }
+
+  function save() {
+    const gj = toGeoJSON(false);
+    updateGlow(gj);
+    try { localStorage.setItem(STORE_KEY, JSON.stringify(gj)); }
+    catch (_) { toast('Could not save to this browser (storage blocked). Use Export to keep your fields.', true); }
+  }
+
+  // Lime glow around every field (fed from the same snapshot that is saved)
+  function updateGlow(gj) {
+    const src = map.getSource('fieldGlow');
+    if (src) src.setData(gj || toGeoJSON(true));
+  }
+
+  // Normalise any GeoJSON into Terra Draw-ready polygons
+  function extractPolygons(gj) {
+    const out = [];
+    const pushPoly = (coords, props, srcId) => {
+      if (!Array.isArray(coords) || !coords.length) return;
+      const rings = coords.map((ring) => {
+        const r = ring.map((c) => [+(+c[0]).toFixed(9), +(+c[1]).toFixed(9)]); // 2D, Terra Draw precision
+        const a = r[0], b = r[r.length - 1];
+        if (a && b && (a[0] !== b[0] || a[1] !== b[1])) r.push([a[0], a[1]]);
+        return r;
+      }).filter((r) => r.length >= 4 && r.every((c) => isFinite(c[0]) && isFinite(c[1]) && Math.abs(c[0]) <= 180 && Math.abs(c[1]) <= 90));
+      if (rings.length) out.push({ rings, props: props || {}, srcId });
+    };
+    const walk = (obj, props, srcId) => {
+      if (!obj) return;
+      if (obj.type === 'FeatureCollection') obj.features.forEach((f) => walk(f));
+      else if (obj.type === 'Feature') walk(obj.geometry, obj.properties, obj.id);
+      else if (obj.type === 'Polygon') pushPoly(obj.coordinates, props, srcId);
+      else if (obj.type === 'MultiPolygon') {
+        const base = nameFromProps(props);
+        obj.coordinates.forEach((p, i) => pushPoly(p, { ...(props || {}), name: base ? `${base} (${i + 1})` : undefined }, null));
+      }
+      else if (obj.type === 'GeometryCollection') obj.geometries.forEach((g) => walk(g, props));
+    };
+    walk(gj);
+    return out;
+  }
+
+  function nameFromProps(p) {
+    if (!p) return '';
+    const v = p.name || p.Name || p.NAME || p.title || p.label;
+    return v == null ? '' : String(v).trim();
+  }
+
+  const UUID_RE =/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+  function addPolygons(polys, { fromStorage = false } = {}) {
+    let added = 0, rejected = 0;
+    const addedIds = [];
+    polys.forEach((p) => {
+      let id = typeof p.srcId === 'string' && UUID_RE.test(p.srcId) && !fields.has(p.srcId) ? p.srcId : uuid();
+      // Reject self-intersecting ("bow-tie") shapes: their area and terrain stats are meaningless
+      try {
+        const poly = turf.polygon(p.rings);
+        if (turf.kinks(poly).features.length) { rejected++; return; }
+        const ha = turf.area(poly) / 10000;
+        if (!fromStorage && (ha < MIN_FIELD_HA || ha > MAX_FIELD_HA)) { rejected++; return; }
+      } catch (_) { rejected++; return; }
+      const res = draw.addFeatures([{ id, type: 'Feature', geometry: { type: 'Polygon', coordinates: p.rings }, properties: { mode: 'polygon' } }]);
+      const ok = Array.isArray(res) ? res[0] && res[0].valid !== false : true;
+      if (!ok) { rejected++; return; }
+      const props = p.props || {};
+      const name = nameFromProps(props) || nextName();
+      fields.set(id, {
+        name: String(name).slice(0, 60),
+        createdAt: props.created_at || new Date().toISOString(),
+        geo: null,
+        terrain: fromStorage && props._terrain ? props._terrain : null,
+        land: fromStorage && props._land ? props._land : null,
+      });
+      const f = featureOf(id);
+      fields.get(id).geo = geometryStats(f);
+      fields.get(id).lastGood = f.geometry;
+      updateLabel(id);
+      if (!fields.get(id).terrain) computeTerrain(id);
+      added++; addedIds.push(id);
+    });
+    // Land check for imported fields and for saved ones that could not be verified before
+    addedIds.forEach((id) => {
+      const land = fields.get(id).land;
+      if (!land || land.status === 'unverified') runLandCheck(id);
+    });
+    return { added, rejected, addedIds };
+  }
+
+  function loadSaved() {
+    let raw = null;
+    try { raw = localStorage.getItem(STORE_KEY); } catch (_) { return; }
+    if (!raw) return;
+    try {
+      const { added } = addPolygons(extractPolygons(JSON.parse(raw)), { fromStorage: true });
+      if (added) toast(`Loaded ${added} saved field${added > 1 ? 's' : ''}`);
+    } catch (err) { console.warn('[storage]', err); }
+  }
+
+  // Branded file header: GeoJSON allows extra top-level members, which GIS tools ignore
+  async function exportHeader() {
+    let logo = '/img/abf-mark.svg';
+    try {
+      const svg = await (await fetch('/img/abf-mark.svg')).text();
+      logo = `data:image/svg+xml;base64,${btoa(unescape(encodeURIComponent(svg)))}`;
+    } catch (_) { /* keep the path */ }
+    return {
+      name: 'ABF Field Shift: field export',
+      generator: 'ABF Field Shift',
+      exported_at: new Date().toISOString(),
+      logo,
+      credits: 'Powered by NASA data · Space Apps Challenge 2026',
+    };
+  }
+
+  async function exportFields() {
+    if (!fields.size) { toast('No fields to export yet.'); return; }
+    const gj = toGeoJSON(true);
+    const header = await exportHeader();
+    const blob = new Blob([JSON.stringify({ type: gj.type, ...header, features: gj.features }, null, 2)], { type: 'application/geo+json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `field-shift-fields-${new Date().toISOString().slice(0, 10)}.geojson`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    toast(`Exported ${fields.size} field${fields.size > 1 ? 's' : ''}`);
+  }
+
+  function importFile(file) {
+    if (!file) return;
+    if (file.size > 10 * 1024 * 1024) { toast('That file is too large (max 10 MB).', true); return; }
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const polys = extractPolygons(JSON.parse(reader.result));
+        if (!polys.length) { toast('No polygons found in that file.', true); return; }
+        setDrawing(false);
+        const { added, rejected, addedIds } = addPolygons(polys);
+        save();
+        render();
+        if (addedIds.length) {
+          const all = turf.featureCollection(addedIds.map(featureOf).filter(Boolean));
+          const b = turf.bbox(all);
+          map.fitBounds([[b[0], b[1]], [b[2], b[3]]], { padding: 80, maxZoom: 16, duration: 1200 });
+        }
+        toast(`Imported ${added} field${added === 1 ? '' : 's'}${rejected ? ` · ${rejected} skipped (crossing edges, or outside ${MIN_FIELD_HA}–${MAX_FIELD_HA} ha)` : ''}`, !added);
+      } catch (_) {
+        toast('Could not read that file. Is it valid GeoJSON?', true);
+      }
+    };
+    reader.readAsText(file);
+  }
+
+  // ─── Overview panel ────────────────────────────────────────────────────────
+  function compassSvg(deg) {
+    const arrow = deg == null ? '' :
+      `<g transform="rotate(${deg} 22 22)"><path d="M22 8 L27 24 L22 21 L17 24 Z" fill="${FIELD_COLOR}"/></g>`;
+    return `<svg class="compass" viewBox="0 0 44 44" aria-hidden="true">
+      <circle cx="22" cy="22" r="19" fill="rgba(255,255,255,0.04)" stroke="rgba(150,170,255,0.35)"/>
+      <text x="22" y="9" text-anchor="middle" font-size="7" fill="#a8b2d4" font-family="Inter">N</text>
+      ${arrow}${deg == null ? '<circle cx="22" cy="22" r="3" fill="#a8b2d4"/>' : ''}
+    </svg>`;
+  }
+
+  function metric(k, v, sub, wide) {
+    return `<div class="metric${wide ? ' wide' : ''}"><div class="k">${k}</div><div class="v${v == null ? ' loading' : ''}">${v == null ? 'Analyzing terrain…' : v}</div>${sub ? `<div class="sub">${sub}</div>` : ''}</div>`;
+  }
+
+  const LAND_BADGE = {
+    ok: { cls: 'ok', icon: '✓', text: 'Allowed land' },
+    minor: { cls: 'minor', icon: '!', text: 'Small overlap' },
+    blocked: { cls: 'blocked', icon: '✕', text: 'On blocked land' },
+    unverified: { cls: 'unverified', icon: '⚠', text: 'Not verified' },
+    checking: { cls: 'checking', icon: '…', text: 'Checking land' },
+  };
+  function landBadge(land, compact) {
+    const b = LAND_BADGE[(land && land.status) || 'unverified'];
+    return `<span class="land-badge ${b.cls}" title="${esc(b.text)}">${b.icon}${compact ? '' : ` ${esc(b.text)}`}</span>`;
+  }
+
+  function landHtml(id, field) {
+    const land = field.land || { status: 'unverified' };
+    const S = window.FieldLand.SHORT;
+    let detail = '';
+    if (land.status === 'ok') {
+      detail = land.allowedClasses && land.allowedClasses.length
+        ? `No water, settlements or roads. Mapped as ${land.allowedClasses.map((c) => S[c] || c).join(', ').toLowerCase()} (${fmt(land.allowedShare * 100)}% of the field).`
+        : 'No water, settlements or roads mapped here.';
+    } else if (land.status === 'minor' || land.status === 'blocked') {
+      detail = `${fmt(land.share * 100, 1)}% overlaps ${land.classes.map((c) => (S[c] || c).toLowerCase()).join(', ')}.`;
+    } else if (land.status === 'unverified') {
+      detail = 'Could not verify land type, check manually. (OpenStreetMap service unavailable.)';
+    } else detail = 'Checking OpenStreetMap…';
+    const canTrim = (land.status === 'minor' || land.status === 'blocked') && landParts.has(id);
+    const canRetry = land.status === 'unverified';
+    return `<div class="metric wide land-row ${LAND_BADGE[land.status] ? LAND_BADGE[land.status].cls : ''}">
+        <div class="k">Land check</div>
+        <div class="land-line">${landBadge(land)}</div>
+        <div class="sub">${esc(detail)}</div>
+        ${canTrim ? '<button class="btn-sm trim-btn" id="trimBtn" type="button">Trim the field automatically</button>' : ''}
+        ${canRetry ? '<button class="btn-sm" id="recheckBtn" type="button">Check again</button>' : ''}
+      </div>`;
+  }
+
+  function renderDetail() {
+    const el = $('fieldDetail');
+    const field = selectedId && fields.get(selectedId);
+    if (!field) {
+      el.innerHTML = fields.size
+        ? '<p class="empty-state">Select a field on the map or in the list below to see its overview.</p>'
+        : `<div class="empty-state"><b>Map your first field</b><ol>
+             <li>Find your land: search for your village or use <i>Go to my location</i>.</li>
+             <li>Press <b>Draw my field</b> and click each corner on the terrain.</li>
+             <li>Click the first corner again to close the field.</li></ol></div>`;
+      return;
+    }
+    const g = field.geo || {};
+    const t = field.terrain;
+    let terrainHtml;
+    if (field.terrainError) {
+      terrainHtml = '<div class="metric wide"><div class="k">Terrain</div><div class="sub">Elevation data could not be loaded. Check your connection and edit the field to retry.</div></div>';
+    } else if (!t) {
+      terrainHtml = metric('Mean elevation', null) + metric('Mean slope', null) + metric('Aspect', null, null, true);
+    } else {
+      const bars = t.slopeShare.map((s, i) => s > 0 ? `<span style="flex:${s};background:${SLOPE_CLASSES[i].color}" title="${SLOPE_CLASSES[i].label}: ${fmt(s * 100)}%"></span>` : '').join('');
+      const legend = t.slopeShare.map((s, i) => s >= 0.005 ? `<span><i style="background:${SLOPE_CLASSES[i].color}"></i>${SLOPE_CLASSES[i].label} ${fmt(s * 100)}%</span>` : '').join('');
+      const aspectSub = t.aspect === 'flat' ? 'Too flat to face a direction' : t.aspect === 'mixed' ? 'Slopes face several directions' : `Slope faces ${fmt(t.aspectDeg)}° from north`;
+      terrainHtml =
+        metric('Mean elevation', `${fmt(t.meanElevation)}<small>m</small>`, `Range ${fmt(t.minElevation)}–${fmt(t.maxElevation)} m`) +
+        metric('Mean slope', `${fmt(t.meanSlope, 1)}<small>°</small>`, `${fmt(Math.tan((t.meanSlope * Math.PI) / 180) * 100, 1)}% grade`) +
+        `<div class="metric wide"><div class="k">Slope distribution</div><div class="slope-bar">${bars}</div><div class="slope-legend">${legend}</div></div>` +
+        `<div class="metric wide"><div class="k">Aspect</div><div class="aspect-wrap">${compassSvg(t.aspectDeg)}<div><div class="v">${ASPECT_NAMES[t.aspect]}</div><div class="sub">${aspectSub}</div></div></div></div>`;
+    }
+    el.innerHTML = `
+      <div class="detail-head"><span class="swatch"></span><input class="name-input" id="nameInput" value="${esc(field.name)}" maxlength="60" aria-label="Field name" /></div>
+      <div class="metrics">
+        ${landHtml(selectedId, field)}
+        ${metric('Area', `${fmt(g.areaHa, g.areaHa < 10 ? 2 : 1)}<small>ha</small>`, `${fmt(g.areaHa * 2.47105, 1)} acres`)}
+        ${metric('Perimeter', `${fmt(g.perimeterKm < 1 ? g.perimeterKm * 1000 : g.perimeterKm, g.perimeterKm < 1 ? 0 : 2)}<small>${g.perimeterKm < 1 ? 'm' : 'km'}</small>`)}
+        ${metric('Centroid', g.centroid ? `${fmt(g.centroid[1], 5)}, ${fmt(g.centroid[0], 5)}` : '–', 'Latitude, longitude', true)}
+        ${terrainHtml}
+      </div>
+      ${t ? `<p class="note">From Terrarium DEM (≈30 m source), ${fmt(t.samples)} samples at ${fmt(t.resolutionM, 1)} m spacing.</p>` : ''}
+      <div class="detail-actions">
+        <button class="btn-sm" id="zoomBtn" type="button">Zoom to</button>
+        <button class="btn-sm" id="editShapeBtn" type="button">Edit shape</button>
+        <button class="btn-sm danger" id="delFieldBtn" type="button">Delete</button>
+      </div>`;
+    const input = $('nameInput');
+    input.addEventListener('change', () => {
+      const v = input.value.trim().slice(0, 60);
+      if (!v) { input.value = field.name; return; }
+      field.name = v;
+      updateLabel(selectedId);
+      save();
+      renderList();
+    });
+    input.addEventListener('keydown', (e) => { if (e.key === 'Enter') input.blur(); e.stopPropagation(); });
+    const id = selectedId;
+    $('zoomBtn').addEventListener('click', () => zoomToField(id));
+    $('editShapeBtn').addEventListener('click', startEdit);
+    $('delFieldBtn').addEventListener('click', () => deleteField(id));
+    if ($('trimBtn')) $('trimBtn').addEventListener('click', () => trimField(id));
+    if ($('recheckBtn')) $('recheckBtn').addEventListener('click', () => runLandCheck(id));
+  }
+
+  function renderList() {
+    const list = $('fieldList');
+    $('fieldCount').textContent = String(fields.size);
+    $('listTitle').hidden = fields.size === 0;
+    $('deleteAllBtn').hidden = fields.size < 2;
+    list.innerHTML = '';
+    [...fields.entries()].sort((a, b) => a[1].createdAt.localeCompare(b[1].createdAt)).forEach(([id, f]) => {
+      const li = document.createElement('li');
+      li.className = id === selectedId ? 'active' : '';
+      li.dataset.id = id;
+      li.innerHTML = `
+        <button type="button" class="fl-select" title="Select and zoom to this field">
+          <span class="swatch"></span><span class="fl-name">${esc(f.name)}</span>${landBadge(f.land, true)}
+          <span class="fl-area">${f.geo ? fmt(f.geo.areaHa, 2) + ' ha' : ''}</span>
+        </button>
+        <button type="button" class="fl-act" data-act="rename" title="Rename" aria-label="Rename ${esc(f.name)}">
+          <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
+        </button>
+        <button type="button" class="fl-act danger" data-act="delete" title="Delete" aria-label="Delete ${esc(f.name)}">
+          <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
+        </button>`;
+      li.querySelector('.fl-select').addEventListener('click', () => selectField(id));
+      li.querySelector('[data-act="rename"]').addEventListener('click', (e) => { e.stopPropagation(); renameField(id); });
+      li.querySelector('[data-act="delete"]').addEventListener('click', (e) => { e.stopPropagation(); deleteField(id); });
+      list.appendChild(li);
+    });
+  }
+
+  function render() {
+    renderDetail();
+    renderList();
+    $('deleteBtn').disabled = !selectedId;
+    if ($('editBtn').classList.contains('active')) startEditHintOnly();
+  }
+  function startEditHintOnly() {
+    hint(selectedId
+      ? 'Drag a corner to reshape · drag a midpoint to add a corner · right-click a corner to remove it · drag inside to move'
+      : 'Click a field on the map (or in the list) to edit it');
+  }
+
+  // ─── Toolbar & keys ────────────────────────────────────────────────────────
+  function bindToolbar() {
+    $('drawBtn').addEventListener('click', () => setDrawing(draw.getMode() !== 'polygon'));
+    $('editBtn').addEventListener('click', () => {
+      if ($('editBtn').classList.contains('active')) { $('editBtn').classList.remove('active'); hint(''); }
+      else startEdit();
+    });
+    $('deleteBtn').addEventListener('click', () => deleteField(selectedId));
+    $('deleteAllBtn').addEventListener('click', deleteAllFields);
+    $('exportBtn').addEventListener('click', exportFields);
+    $('importBtn').addEventListener('click', () => $('importFile').click());
+    $('importFile').addEventListener('change', (e) => { importFile(e.target.files[0]); e.target.value = ''; });
+    document.addEventListener('keydown', (e) => {
+      const typing = /INPUT|TEXTAREA/.test(document.activeElement && document.activeElement.tagName);
+      if (e.key === 'Escape' && draw && draw.getMode() === 'polygon') setDrawing(false);
+      else if (e.key === 'Escape' && $('editBtn').classList.contains('active')) { $('editBtn').classList.remove('active'); hint(''); }
+      else if ((e.key === 'Delete' || e.key === 'Backspace') && !typing && selectedId && !isDrawing() &&
+               !document.querySelector('.modal-backdrop')) { e.preventDefault(); deleteField(selectedId); }
+    });
+  }
+
+  // ─── Boot ──────────────────────────────────────────────────────────────────
+  bindViewControls();
+  bindSearch();
+  bindToolbar();
+  render();
+  $('brandBtn').addEventListener('click', myLocation); // logo re-centres on the user's location
+
+  // Loading screen: hide once the map has rendered; never block longer than 15 s
+  let loaderHidden = false;
+  const hideLoader = () => {
+    if (loaderHidden) return;
+    loaderHidden = true;
+    $('loader').classList.add('done');
+    setTimeout(() => $('loader').remove(), 700);
+  };
+  map.once('load', hideLoader);
+  map.once('style.load', () => setTimeout(hideLoader, 5000)); // slow horizon tiles shouldn't hold it
+  setTimeout(hideLoader, 15000);
+
+  // 'style.load' rather than 'load': at 60° pitch 'load' waits for every horizon tile,
+  // which can take many seconds on slow connections. Drawing only needs the style.
+  map.once('style.load', () => {
+    addHatch();
+    setupDraw();
+    loadSaved();
+    updateGlow();
+    render();
+    map.on('moveend', () => { if ($('lyrZones').checked || isDrawing()) refreshZones(); });
+    map.on('mousemove', (e) => { if (isDrawing()) updateCursorTip(e); });
+    map.getCanvas().addEventListener('mouseleave', () => { $('cursorTip').hidden = true; });
+    if (fields.size) {
+      // Returning user: open on their saved fields rather than the IP location
+      const all = turf.featureCollection([...fields.keys()].map(featureOf).filter(Boolean));
+      const b = turf.bbox(all);
+      map.fitBounds([[b[0], b[1]], [b[2], b[3]]], { padding: 120, maxZoom: 15, pitch: PITCH_3D, duration: 1500 });
+      status('Showing your saved fields');
+    } else {
+      startLocation();
+    }
+  });
+
+  // Exposed for debugging in the console only
+  window.fieldShift = { map, fields, landParts, get draw() { return draw; } };
+})();

@@ -1,0 +1,273 @@
+{
+  "rules": {
+    "_comment": "Crop advisor rules. Scores are 0-100. Edit values here to tune recommendations; no code changes needed.",
+    "growingSeasonMonths": [4, 5, 6, 7, 8, 9],
+    "weights": { "temperature": 35, "water": 35, "soil": 10, "landFit": 10, "trend": 10 },
+    "irrigationBonusMm": { "low": 0, "medium": 350, "high": 800 },
+    "waterLevels": ["low", "medium", "high"],
+    "waterNeedPenaltyPerStep": 0.45,
+    "temperatureToleranceC": 5,
+    "landSize": {
+      "smallMaxHa": 2,
+      "largeMinHa": 20,
+      "highValue": ["tomato", "onion", "watermelon", "apricot", "potato", "mungbean"],
+      "largeScale": ["wheat", "barley", "cotton", "corn", "sunflower", "alfalfa", "rice"]
+    },
+    "soilMoisture": { "dry": 0.3, "wet": 0.6 },
+    "trendThresholds": { "precipPct": 10, "tempDegPerDecade": 0.2, "soilPct": 5 },
+    "heatSensitiveTempMax": 30,
+    "diversifyGroups": true,
+    "rotation": {
+      "years": 3,
+      "perennial": ["apricot"],
+      "nitrogenFixers": ["chickpea", "mungbean", "alfalfa"],
+      "nitrogenFixerBonus": 15,
+      "avoidSameGroupConsecutive": true
+    },
+    "warnings": {
+      "drought": { "soilDry": 0.3, "soilCritical": 0.22, "recentDropPct": 10 },
+      "heat": { "currentHigh": 38, "currentMedium": 33, "summerMeanHigh": 28 },
+      "fire": { "nearKm": 25, "radiusKm": 75, "highCount": 5, "lowHumidity": 30, "strongWindKmh": 20, "hotTempC": 30 }
+    }
+  },
+  "crops": [
+    {
+      "id": "wheat",
+      "name": { "en": "Winter Wheat", "ru": "Озимая пшеница", "tj": "Гандуми тирамоҳӣ" },
+      "icon": "🌾",
+      "waterNeed": "low",
+      "tempMin": 5,
+      "tempMax": 30,
+      "precipMin": 300,
+      "precipMax": 800,
+      "group": "cereal",
+      "rotateAfter": ["legume", "oilseed", "fallow"],
+      "description": {
+        "en": "Hardy grain crop, staple of Central Asian agriculture. Tolerates cold winters.",
+        "ru": "Выносливая зерновая культура, основа сельского хозяйства Центральной Азии.",
+        "tj": "Зироати ғалладонаи тобовар, асоси кишоварзии Осиёи Марказӣ."
+      }
+    },
+    {
+      "id": "barley",
+      "name": { "en": "Barley", "ru": "Ячмень", "tj": "Ҷав" },
+      "icon": "🌿",
+      "waterNeed": "low",
+      "tempMin": 3,
+      "tempMax": 28,
+      "precipMin": 250,
+      "precipMax": 700,
+      "group": "cereal",
+      "rotateAfter": ["legume", "oilseed", "fallow"],
+      "description": {
+        "en": "Drought-tolerant cereal that thrives in the cooler mountain valleys of Tajikistan.",
+        "ru": "Засухоустойчивая зерновая культура, хорошо растущая в прохладных горных долинах Таджикистана.",
+        "tj": "Зироати ғалладонаи хушкиро тоб меоварад, дар водиҳои хунуки кӯҳии Тоҷикистон хуб мерӯяд."
+      }
+    },
+    {
+      "id": "rice",
+      "name": { "en": "Rice", "ru": "Рис", "tj": "Биринҷ" },
+      "icon": "🍚",
+      "waterNeed": "high",
+      "tempMin": 20,
+      "tempMax": 38,
+      "precipMin": 1000,
+      "precipMax": 2000,
+      "group": "cereal",
+      "rotateAfter": ["legume", "oilseed", "fallow"],
+      "description": {
+        "en": "Staple paddy crop cultivated in irrigated lowlands of southern Central Asia.",
+        "ru": "Основная культура рисовых полей, выращиваемая на орошаемых низменностях юга Центральной Азии.",
+        "tj": "Зироати асосии шолипоя, дар заминҳои обёрии паст дар ҷануби Осиёи Марказӣ кишт мешавад."
+      }
+    },
+    {
+      "id": "cotton",
+      "name": { "en": "Cotton", "ru": "Хлопчатник", "tj": "Пахта" },
+      "icon": "☁️",
+      "waterNeed": "medium",
+      "tempMin": 18,
+      "tempMax": 38,
+      "precipMin": 500,
+      "precipMax": 1200,
+      "group": "industrial",
+      "rotateAfter": ["cereal", "legume", "fallow"],
+      "description": {
+        "en": "Major cash crop of the region, well-adapted to the hot summers of the Fergana and Vakhsh valleys.",
+        "ru": "Главная товарная культура региона, хорошо приспособленная к жаркому лету Ферганской и Вахшской долин.",
+        "tj": "Зироати асосии тиҷоратии минтақа, ба тобистонҳои гарми водиҳои Фарғона ва Вахш мувофиқ аст."
+      }
+    },
+    {
+      "id": "potato",
+      "name": { "en": "Potato", "ru": "Картофель", "tj": "Картошка" },
+      "icon": "🥔",
+      "waterNeed": "medium",
+      "tempMin": 10,
+      "tempMax": 25,
+      "precipMin": 400,
+      "precipMax": 800,
+      "group": "tuber",
+      "rotateAfter": ["cereal", "legume"],
+      "description": {
+        "en": "Important food security crop grown in Tajikistan's mid-altitude valleys and highlands.",
+        "ru": "Важная культура продовольственной безопасности, выращиваемая в среднегорных долинах и нагорьях Таджикистана.",
+        "tj": "Зироати муҳими амнияти озуқа, дар водиҳои миёнакӯҳӣ ва баландиҳои Тоҷикистон парвариш мешавад."
+      }
+    },
+    {
+      "id": "tomato",
+      "name": { "en": "Tomato", "ru": "Томат", "tj": "Помидор" },
+      "icon": "🍅",
+      "waterNeed": "medium",
+      "tempMin": 18,
+      "tempMax": 32,
+      "precipMin": 400,
+      "precipMax": 800,
+      "group": "vegetable",
+      "rotateAfter": ["cereal", "legume"],
+      "description": {
+        "en": "Widely grown vegetable prized in Central Asian cuisine, thriving in warm irrigated lowlands.",
+        "ru": "Широко распространённый овощ, ценимый в кухне Центральной Азии, хорошо растёт на тёплых орошаемых равнинах.",
+        "tj": "Сабзавоте, ки дар ошпазии Осиёи Марказӣ қадр дорад ва дар заминҳои гарми обёрӣ хуб мерӯяд."
+      }
+    },
+    {
+      "id": "onion",
+      "name": { "en": "Onion", "ru": "Лук репчатый", "tj": "Пиёз" },
+      "icon": "🧅",
+      "waterNeed": "low",
+      "tempMin": 12,
+      "tempMax": 30,
+      "precipMin": 350,
+      "precipMax": 700,
+      "group": "vegetable",
+      "rotateAfter": ["cereal", "legume"],
+      "description": {
+        "en": "Essential kitchen staple across Central Asia, well-suited to the region's dry continental climate.",
+        "ru": "Незаменимый продукт на кухне Центральной Азии, хорошо подходит для сухого континентального климата региона.",
+        "tj": "Маҳсулоти зарурии ошхонаи Осиёи Марказӣ, ба иқлими хушки континенталии минтақа мувофиқ аст."
+      }
+    },
+    {
+      "id": "chickpea",
+      "name": { "en": "Chickpea", "ru": "Нут", "tj": "Нахӯд" },
+      "icon": "🫘",
+      "waterNeed": "low",
+      "tempMin": 10,
+      "tempMax": 32,
+      "precipMin": 300,
+      "precipMax": 600,
+      "group": "legume",
+      "rotateAfter": ["cereal", "vegetable"],
+      "description": {
+        "en": "Protein-rich legume that fixes nitrogen and improves soil health in dryland farming systems.",
+        "ru": "Богатое белком бобовое растение, фиксирующее азот и улучшающее здоровье почвы в богарном земледелии.",
+        "tj": "Лӯбиёи серсафеда, ки нитрогенро маҳкам мекунад ва ҳосилхезии хокро дар кишоварзии лалмӣ беҳтар мекунад."
+      }
+    },
+    {
+      "id": "mungbean",
+      "name": { "en": "Mung Bean", "ru": "Маш", "tj": "Мош" },
+      "icon": "🌱",
+      "waterNeed": "low",
+      "tempMin": 20,
+      "tempMax": 35,
+      "precipMin": 300,
+      "precipMax": 600,
+      "group": "legume",
+      "rotateAfter": ["cereal", "vegetable"],
+      "description": {
+        "en": "Fast-maturing legume popular in Tajik cuisine, excellent as a short-season rotation crop.",
+        "ru": "Быстросозревающее бобовое, популярное в таджикской кухне, отличная культура для короткого севооборота.",
+        "tj": "Лӯбиёи зудпаз, дар ошпазии тоҷикӣ маъмул аст ва барои навбати кишти кӯтоҳмуддат хеле мувофиқ аст."
+      }
+    },
+    {
+      "id": "corn",
+      "name": { "en": "Corn (Maize)", "ru": "Кукуруза", "tj": "Ҷуворимакка" },
+      "icon": "🌽",
+      "waterNeed": "high",
+      "tempMin": 18,
+      "tempMax": 35,
+      "precipMin": 500,
+      "precipMax": 1200,
+      "group": "cereal",
+      "rotateAfter": ["legume", "oilseed", "fallow"],
+      "description": {
+        "en": "Versatile cereal used for food and animal feed, grown in irrigated valleys across Tajikistan.",
+        "ru": "Универсальная зерновая культура для продовольствия и кормов, выращиваемая в орошаемых долинах Таджикистана.",
+        "tj": "Зироати универсалии ғалладона барои хӯрок ва хӯроки чорво, дар водиҳои обёрии Тоҷикистон кишт мешавад."
+      }
+    },
+    {
+      "id": "sunflower",
+      "name": { "en": "Sunflower", "ru": "Подсолнечник", "tj": "Офтобпараст" },
+      "icon": "🌻",
+      "waterNeed": "medium",
+      "tempMin": 15,
+      "tempMax": 30,
+      "precipMin": 400,
+      "precipMax": 800,
+      "group": "oilseed",
+      "rotateAfter": ["cereal", "legume"],
+      "description": {
+        "en": "Important oilseed crop providing cooking oil, well-adapted to the warm semi-arid climate.",
+        "ru": "Важная масличная культура для производства растительного масла, приспособленная к тёплому полузасушливому климату.",
+        "tj": "Зироати муҳими равғандона барои равғани хӯрокпазӣ, ба иқлими гарми нимхушк мувофиқ аст."
+      }
+    },
+    {
+      "id": "alfalfa",
+      "name": { "en": "Alfalfa", "ru": "Люцерна", "tj": "Юнучқа" },
+      "icon": "🍀",
+      "waterNeed": "high",
+      "tempMin": 5,
+      "tempMax": 35,
+      "precipMin": 500,
+      "precipMax": 1500,
+      "group": "fodder",
+      "rotateAfter": ["cereal", "industrial"],
+      "description": {
+        "en": "Deep-rooted perennial fodder that enriches soil nitrogen and supports livestock in mountain communities.",
+        "ru": "Глубококорневая многолетняя кормовая культура, обогащающая почву азотом и обеспечивающая кормом скот в горных общинах.",
+        "tj": "Зироати бисёрсолаи решадарози хӯроки чорво, ки хокро бо нитроген бой мекунад ва чорводориро дар ҷамоатҳои кӯҳӣ дастгирӣ мекунад."
+      }
+    },
+    {
+      "id": "watermelon",
+      "name": { "en": "Watermelon", "ru": "Арбуз", "tj": "Тарбуз" },
+      "icon": "🍉",
+      "waterNeed": "medium",
+      "tempMin": 22,
+      "tempMax": 35,
+      "precipMin": 400,
+      "precipMax": 700,
+      "group": "melon",
+      "rotateAfter": ["cereal", "legume"],
+      "description": {
+        "en": "Heat-loving melon cultivated in the sun-drenched lowlands, a prized summer crop in Tajikistan.",
+        "ru": "Теплолюбивая бахчевая культура, выращиваемая на солнечных равнинах, ценный летний урожай в Таджикистане.",
+        "tj": "Зироати гармидӯсти полизӣ, дар пастиҳои офтобрӯя кишт мешавад, ҳосили қиматноки тобистонии Тоҷикистон."
+      }
+    },
+    {
+      "id": "apricot",
+      "name": { "en": "Apricot", "ru": "Абрикос", "tj": "Зардолу" },
+      "icon": "🍑",
+      "waterNeed": "low",
+      "tempMin": 8,
+      "tempMax": 35,
+      "precipMin": 300,
+      "precipMax": 700,
+      "group": "fruit",
+      "rotateAfter": ["cereal", "legume", "fallow"],
+      "description": {
+        "en": "Iconic fruit tree of Tajikistan, thriving in sunny foothill orchards with minimal irrigation.",
+        "ru": "Знаковое плодовое дерево Таджикистана, прекрасно растущее в солнечных предгорных садах при минимальном орошении.",
+        "tj": "Дарахти мевадори рамзии Тоҷикистон, дар боғҳои офтобии доманакӯҳ бо обёрии кам хуб мерӯяд."
+      }
+    }
+  ]
+}
