@@ -3,3 +3,5 @@
 node_modules/
 data/tile-cache/
 data/trees-cache/
+data/accounts.db
+data/accounts.db-*

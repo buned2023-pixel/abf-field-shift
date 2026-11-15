@@ -17,6 +17,8 @@ const DEFAULT_LOCATION = { lat: 38.56, lon: 68.77, city: 'Dushanbe', country: 'T
 
 app.use(express.static(path.join(__dirname, 'public')));
 app.use('/locales', express.static(path.join(__dirname, 'locales'))); // UI texts: en, ru, tg
+// Private accounts: sign up / sign in, sessions, and each user's own saved fields and settings (lib/accounts.js)
+require('./lib/accounts')(app);
 
 /**
  * Helper: fetch a URL and return the raw body as a string.

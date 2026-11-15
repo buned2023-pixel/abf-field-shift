@@ -32,8 +32,9 @@
   const cropLower = (c) => cropText(c, 'lower', c.name.toLowerCase());
   const family = (f) => (I18N.has('family.' + f) ? t('family.' + f) : f);
 
-  function load() { try { inputs = JSON.parse(localStorage.getItem(STORE_KEY)) || {}; } catch (_) { inputs = {}; } }
-  function save() { try { localStorage.setItem(STORE_KEY, JSON.stringify(inputs)); } catch (_) { /* storage blocked: keep in memory */ } }
+  // Saved in the user's account when signed in, otherwise in this browser (account.js)
+  function load() { try { inputs = JSON.parse(window.FSStore.getSetting(STORE_KEY)) || {}; } catch (_) { inputs = {}; } }
+  function save() { window.FSStore.setSetting(STORE_KEY, JSON.stringify(inputs)); }
   function inputsFor(id) {
     if (!inputs[id]) inputs[id] = { water: 'medium', irrigation: false, prefs: [] };
     return inputs[id];

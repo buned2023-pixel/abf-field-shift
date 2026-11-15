@@ -25,6 +25,10 @@ something failed, is blocked, or needs my decision, say so in one short line.
   1 h cache, disk copy in `data/power-cache/daily/`), `/api/disease-rules`, `/api/landcheck` and
   `/api/landzones` (Overpass), `/api/risk-rules`, `/api/crop-rules`, `/tiles/terrarium/...` (DEM proxy
   with disk cache in `data/tile-cache/`). Cache: 10 min in memory; errors are never cached.
+- `lib/accounts.js`: private accounts (username + password, argon2id, one-time recovery code), httpOnly
+  session cookie, CSRF header, login rate limit. SQLite `data/accounts.db` (git-ignored). Routes:
+  `/api/auth/*`, `/api/fields` and `/api/settings` (always filtered by user; others' items give 404).
+  Signed out, fields stay in localStorage and move into the account at sign in (`public/map/account.js`).
 - `lib/overpass.js`: OpenStreetMap queries (mirrors, timeouts, 1 h cache).
 - `config/risk-rules.json`: scoring for the DROUGHT / HEAT / FIRE badges.
 - `config/crops.json`: crop advisor rules (11 crops).

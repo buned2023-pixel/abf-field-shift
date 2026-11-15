@@ -13,12 +13,12 @@
   const small = () => window.matchMedia('(max-width: 899px)').matches;
 
   let saved = {};
-  try { saved = JSON.parse(localStorage.getItem(KEY)) || {}; } catch (_) { saved = {}; }
+  try { saved = JSON.parse(window.FSStore.getSetting(KEY)) || {}; } catch (_) { saved = {}; } // account or this browser
   const isOpen = (id) => (id in saved ? !!saved[id] : DEFAULT_OPEN[id]);
   const el = (id) => document.getElementById(id);
   const visible = (id) => el(id) && !el(id).hidden;
 
-  function store() { try { localStorage.setItem(KEY, JSON.stringify(saved)); } catch (_) { /* storage blocked */ } }
+  function store() { window.FSStore.setSetting(KEY, JSON.stringify(saved)); }
 
   function apply(id, open) {
     const p = el(id);

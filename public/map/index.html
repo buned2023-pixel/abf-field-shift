@@ -15,6 +15,7 @@
   <link rel="stylesheet" href="map.css" />
   <link rel="stylesheet" href="climate.css" />
   <link rel="stylesheet" href="ui.css" />
+  <script src="account.js"></script>
   <script src="i18n.js"></script>
 </head>
 <body>
@@ -52,6 +53,10 @@
       <ul id="searchResults" class="search-results" hidden></ul>
     </form>
     <div class="status-line" id="statusLine" role="status" aria-live="polite"></div>
+    <button class="acct-btn" id="accountBtn" type="button">
+      <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><circle cx="12" cy="8" r="4" fill="none" stroke="currentColor" stroke-width="2"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      <span class="acct-label-text"></span>
+    </button>
     <div class="lang-switch" role="group" data-i18n-attr="aria-label:top.language">
       <button type="button" data-lang="en" lang="en" title="English">EN</button>
       <button type="button" data-lang="ru" lang="ru" title="Русский">RU</button>

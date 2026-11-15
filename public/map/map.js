@@ -4,7 +4,6 @@
 
   // ─── Config ────────────────────────────────────────────────────────────────
   const DUSHANBE = { lat: 38.56, lon: 68.77, name: 'Dushanbe' };
-  const STORE_KEY = 'fieldshift.fields.v1';
   const FIELD_COLOR = '#D4F20C';   // lime
   const SELECT_COLOR = '#2F4BFF';  // electric blue
   const BLOCK_COLOR = '#ff3b4f';
@@ -892,7 +891,7 @@
   function save() {
     const gj = toGeoJSON(false);
     updateGlow(gj);
-    try { localStorage.setItem(STORE_KEY, JSON.stringify(gj)); }
+    try { window.FSStore.saveFields(gj); } // the user's account when signed in, otherwise this browser
     catch (_) { toast(t('toast.storage'), true); }
   }
 
@@ -981,10 +980,10 @@
 
   function loadSaved() {
     let raw = null;
-    try { raw = localStorage.getItem(STORE_KEY); } catch (_) { return; }
+    try { raw = window.FSStore.loadFields(); } catch (_) { return; }
     if (!raw) return;
     try {
-      const { added } = addPolygons(extractPolygons(JSON.parse(raw)), { fromStorage: true });
+      const { added } = addPolygons(extractPolygons(raw), { fromStorage: true });
       if (added) toast(t('toast.loaded', { n: added }));
     } catch (err) { console.warn('[storage]', err); }
   }

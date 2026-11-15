@@ -69,7 +69,7 @@ for (const l of LANGS.filter((x) => x !== 'en')) {
 const DIR = path.join(ROOT, 'public', 'map');
 const jsFiles = fs.readdirSync(DIR).filter((f) => f.endsWith('.js') && f !== 'i18n.js');
 const known = new Set(en.keys());
-const dynamicPrefixes = ['dis.', 'ov.slope.', 'ov.aspect.', 'land.badge.', 'land.long.', 'land.short.', 'risk.', 'tl.trend.', 'adv.level.', 'adv.need.', 'adv.limit.', 'adv.wt.type.', 'adv.wt.access.', 'crop.', 'family.', 'wx.desc.'];
+const dynamicPrefixes = ['acct.', 'dis.', 'ov.slope.', 'ov.aspect.', 'land.badge.', 'land.long.', 'land.short.', 'risk.', 'tl.trend.', 'adv.level.', 'adv.need.', 'adv.limit.', 'adv.wt.type.', 'adv.wt.access.', 'crop.', 'family.', 'wx.desc.'];
 
 // Strings that are data or code, not text for people
 const ALLOW = [

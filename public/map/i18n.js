@@ -25,7 +25,7 @@
   }
 
   function pickLang() {
-    try { const s = localStorage.getItem(KEY); if (LANGS.includes(s)) return s; } catch (_) { /* storage blocked */ }
+    const s = window.FSStore ? window.FSStore.getSetting(KEY) : null; if (LANGS.includes(s)) return s; // account or this browser
     const nav = (navigator.languages && navigator.languages.length ? navigator.languages : [navigator.language || 'en']);
     for (const n of nav) { const p = String(n).toLowerCase().slice(0, 2); if (LANGS.includes(p)) return p; }
     return 'en';
@@ -118,7 +118,7 @@
     loadDict(l);
     lang = l;
     updateIntl();
-    try { localStorage.setItem(KEY, l); } catch (_) { /* storage blocked */ }
+    if (window.FSStore) window.FSStore.setSetting(KEY, l);
     document.documentElement.lang = l;
     applyStatic();
     listeners.forEach((fn) => { try { fn(l); } catch (e) { console.warn('[i18n]', e); } });
