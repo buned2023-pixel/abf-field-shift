@@ -21,16 +21,19 @@ something failed, is blocked, or needs my decision, say so in one short line.
 ## Layout
 
 - `server.js`: Express backend. Endpoints: `/api/location` (IPstack), `/api/geocode`, `/api/weather`
-  (Weatherstack), `/api/firms` (NASA FIRMS), `/api/power` (NASA POWER), `/api/landcheck` and
+  (Weatherstack), `/api/firms` (NASA FIRMS), `/api/power` (NASA POWER), `/api/power-daily` (last 30 days,
+  1 h cache, disk copy in `data/power-cache/daily/`), `/api/disease-rules`, `/api/landcheck` and
   `/api/landzones` (Overpass), `/api/risk-rules`, `/api/crop-rules`, `/tiles/terrarium/...` (DEM proxy
   with disk cache in `data/tile-cache/`). Cache: 10 min in memory; errors are never cached.
 - `lib/overpass.js`: OpenStreetMap queries (mirrors, timeouts, 1 h cache).
 - `config/risk-rules.json`: scoring for the DROUGHT / HEAT / FIRE badges.
 - `config/crops.json`: crop advisor rules (11 crops).
+- `config/disease-rules.json`: 2 diseases per crop, approximate thresholds (confirm with an agronomist).
+- `locales/{en,ru,tg}.json`: all UI text; `npm run check-locales` checks keys and hard-coded text.
 - `public/map/`: `map.js` (map, drawing, fields, storage), `dem.js` (elevation/slope/aspect),
   `landcheck.js` (no-draw land), `dialog.js` (in-app confirm), `styles.js` (pins, risk styles),
   `trees.js` (GPU-instanced 3D trees), `plants.js` (3D crop rows), `climate.js` (Stage 2: timeline,
-  weather card, fire layer, risk badges), `advisor.js` (Stage 3: crop advisor).
+  weather card, fire layer, risk badges), `advisor.js` (Stage 3: crop advisor), `disease.js` (crop disease risk), `i18n.js` (EN/RU/TJ).
 
 ## Status
 

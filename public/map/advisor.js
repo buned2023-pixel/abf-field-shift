@@ -18,6 +18,7 @@
   let rules = null, opts = {};
   let inputs = {};   // fieldId → { water, irrigation, prefs: [cropId] }
   let open = true;
+  const topByField = {}; // fieldId → ids of the best 3 crops (used by the field's DISEASE badge)
 
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const fmt = I18N.fmt;
@@ -233,6 +234,8 @@
     else if (!a) body = `<p class="adv-wait">${esc(t(C && C.state.powerErr ? 'adv.noClimate' : 'adv.waitClimate'))}</p>`;
     else {
       const r = evaluate(field, inp, a, C.state.risks);
+      const ids = r.top.map((x) => x.crop.id).join(',');
+      if (topByField[id] !== ids) { topByField[id] = ids; if (opts.rerender) setTimeout(opts.rerender, 0); } // the DISEASE badge above follows the best crops
       if (opts.setCrop && r.top[0]) { const c = r.top[0].crop; opts.setCrop(id, { id: c.id, color: c.color, color2: c.color2, height: c.rowHeightM }); }
       const warn = r.warnings.map((w) => `<div class="adv-warn"><span aria-hidden="true">⚠</span><span>${esc(w)}</span></div>`).join('');
       const wInfo = window.FieldWater ? window.FieldWater.info(id, field) : { status: 'unknown' };
@@ -242,6 +245,7 @@
           <div class="adv-bar" role="img" aria-label="${esc(t('adv.scoreAria', { score: c.score }))}"><span style="width:${c.score}%"></span></div>
           <p class="adv-why">${esc(shortReason(c))}</p>
           ${waterHtml(c.crop, r.rainYear, field, wInfo)}
+          ${window.FieldDisease ? window.FieldDisease.cropHtml(c.crop.id) : ''}
           <details class="adv-more"><summary>${esc(t('adv.more'))}</summary>
             <ul class="adv-reasons">${c.reasons.map((x) => `<li class="${x.ok ? 'ok' : 'no'}">${esc(x.text)}</li>`).join('')}</ul>
             <p class="adv-plant"><b>${esc(t('adv.planting'))}</b> ${esc(c.window.text)}</p>
@@ -302,5 +306,6 @@
     if (opts.rerender) opts.rerender();
   }
 
-  window.FieldAdvisor = { init, html, get rules() { return rules; } };
+  const topIds = (fieldId) => (topByField[fieldId] ? topByField[fieldId].split(',') : []);
+  window.FieldAdvisor = { init, html, topIds, get rules() { return rules; } };
 })();

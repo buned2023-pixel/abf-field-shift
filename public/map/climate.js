@@ -209,7 +209,7 @@
       }
       const msg = esc(t(state[errKey] ? 'risk.noData' : 'risk.loading'));
       return `<div class="risk risk-${key} lvl-none">${head('<span class="risk-level">…</span>')}<p class="risk-say">${msg}</p></div>`;
-    }).join('');
+    }).join('') + (window.FieldDisease ? window.FieldDisease.fieldBadgeHtml(window.FieldAdvisor && window.FieldAdvisor.topIds(fieldId), help) : '');
     return `<div class="metric wide risk-box"><div class="k">${esc(t('risk.title'))}</div>${rows}</div>`;
   }
 

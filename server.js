@@ -342,15 +342,17 @@ function parsePower(data, startYear, endYear, currentYear, lat, lon) {
 // Saved copies of successful POWER answers (data/power-cache), used when the live API fails.
 // Monthly climate history barely changes, so an old copy is still useful for a demo.
 const POWER_DIR = path.join(__dirname, 'data', 'power-cache');
-const powerFile = (lat, lon) => path.join(POWER_DIR, `${lat.toFixed(2)}_${lon.toFixed(2)}.json`);
-function savePowerFile(result) {
+const POWER_DAILY_DIR = path.join(POWER_DIR, 'daily'); // last-30-days answers for the disease badge
+const powerFile = (lat, lon, dir = POWER_DIR) => path.join(dir, `${lat.toFixed(2)}_${lon.toFixed(2)}.json`);
+function savePowerFile(result, dir = POWER_DIR) {
   try {
-    fs.mkdirSync(POWER_DIR, { recursive: true });
-    fs.writeFileSync(powerFile(result.lat, result.lon), JSON.stringify({ ...result, savedAt: new Date().toISOString() }));
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(powerFile(result.lat, result.lon, dir), JSON.stringify({ ...result, savedAt: new Date().toISOString() }));
   } catch (err) { console.warn('[power] could not save copy:', err.message); }
 }
-function readPowerFile(lat, lon) {
-  try { return JSON.parse(fs.readFileSync(powerFile(lat, lon), 'utf8')); } catch (_) { /* try a nearby point */ }
+function readPowerFile(lat, lon, dir = POWER_DIR) {
+  const POWER_DIR = dir; // nearby search below looks in the same folder
+  try { return JSON.parse(fs.readFileSync(powerFile(lat, lon, dir), 'utf8')); } catch (_) { /* try a nearby point */ }
   // POWER cells are 0.5° x 0.625°, so a saved point within 0.25° has practically the same data
   let best = null, bestD = 0.25;
   try {
@@ -363,6 +365,64 @@ function readPowerFile(lat, lon) {
     return best ? JSON.parse(fs.readFileSync(path.join(POWER_DIR, best), 'utf8')) : null;
   } catch (_) { return null; }
 }
+
+// GET /api/power-daily?lat=&lon= — NASA POWER daily T2M, RH2M, PRECTOTCORR for the last 30 days
+// (crop disease risk). Cached 1 hour in memory (errors never cached), saved copy on disk as a fallback.
+const POWER_DAILY_TTL = 60 * 60 * 1000;
+app.get('/api/power-daily', async (req, res) => {
+  const lat = round(parseFloat(req.query.lat), 2);
+  const lon = round(parseFloat(req.query.lon), 2);
+  if (isNaN(lat) || isNaN(lon)) return res.status(400).json({ error: 'lat and lon are required numeric query parameters' });
+  try {
+    const result = await cached(`power-daily:${lat},${lon}`, POWER_DAILY_TTL, () => fetchPowerDaily(lat, lon));
+    savePowerFile(result, POWER_DAILY_DIR);
+    res.json(result);
+  } catch (err) {
+    const saved = readPowerFile(lat, lon, POWER_DAILY_DIR);
+    if (!saved) {
+      console.warn(`[power-daily] ${lat},${lon}: live request failed (${err.message}) and no saved copy exists`);
+      return res.status(502).json({ error: 'power_daily_unavailable' });
+    }
+    console.warn(`[power-daily] ${lat},${lon}: live request failed (${err.message}); serving saved copy from ${saved.savedAt}`);
+    res.json({ ...saved, stale: true });
+  }
+});
+
+// POWER daily data lags a few days, so ask for 40 days and keep the last 30 that have values. One retry.
+async function fetchPowerDaily(lat, lon) {
+  const ymd = (d) => d.toISOString().slice(0, 10).replace(/-/g, '');
+  const end = new Date(), start = new Date(Date.now() - 40 * 86400000);
+  const url = `https://power.larc.nasa.gov/api/temporal/daily/point?parameters=T2M,RH2M,PRECTOTCORR&community=AG&longitude=${lon}&latitude=${lat}&start=${ymd(start)}&end=${ymd(end)}&format=JSON`;
+  let lastErr;
+  for (let t = 1; t <= 2; t++) {
+    try {
+      const data = JSON.parse((await fetchBuffer(url, POWER_TIMEOUT_MS)).toString('utf8'));
+      const p = data.properties && data.properties.parameter;
+      if (!p || !p.T2M) throw new Error('no data in answer');
+      const fill = (data.header && data.header.fill_value) != null ? data.header.fill_value : -999;
+      const v = (param, k) => { const x = p[param] ? p[param][k] : undefined; return x == null || x === fill ? null : x; };
+      const days = Object.keys(p.T2M).sort().map((k) => ({
+        date: `${k.slice(0, 4)}-${k.slice(4, 6)}-${k.slice(6, 8)}`,
+        temp: v('T2M', k), rh: v('RH2M', k), rain: v('PRECTOTCORR', k), // °C, %, mm/day
+      })).filter((d) => d.temp != null && d.rh != null).slice(-30);
+      if (days.length < 10) throw new Error('too few days with data');
+      return { lat, lon, days };
+    } catch (err) {
+      lastErr = err;
+      if (err.status && err.status < 500) break;
+    }
+  }
+  throw lastErr;
+}
+
+// GET /api/disease-rules — crop disease thresholds (config/disease-rules.json)
+app.get('/api/disease-rules', (req, res) => {
+  try {
+    res.json(JSON.parse(fs.readFileSync(path.join(__dirname, 'config', 'disease-rules.json'), 'utf-8')));
+  } catch (err) {
+    res.status(500).json({ error: 'disease_rules_unavailable' });
+  }
+});
 
 // GET /api/risk-rules — scoring rules for the drought / heat / fire badges (config/risk-rules.json)
 app.get('/api/risk-rules', (req, res) => {

@@ -267,3 +267,21 @@ body.tl-open .toolbar { bottom: calc(var(--bz) + var(--gap)); }
 @media (max-width: 899px) { /* longer RU/TJ status text must not run under the zoom buttons on the right */
   .topbar .status-line { left: var(--gap); transform: none; max-width: calc(100vw - 2 * var(--gap) - 68px); }
 }
+
+/* ── Crop disease risk (disease.js): inside each crop card and as the fourth field badge ── */
+.adv-dis { margin: 7px 0 0; padding: 6px 8px; border-radius: 8px; background: rgba(180, 120, 255, 0.07); border: 1px solid rgba(180, 120, 255, 0.3); display: grid; gap: 6px; }
+.adv-dis-h { font: 700 11px 'Inter', sans-serif; letter-spacing: 0.08em; text-transform: uppercase; color: #d2b6ff; }
+.adv-dis-h small { text-transform: none; letter-spacing: 0; font-weight: 500; color: var(--text-2); }
+.adv-dis-msg { margin: 0; font-size: 13px; color: var(--text-2); }
+.dis-row { border-left: 3px solid var(--border); padding-left: 8px; }
+.dis-row.lvl-low { border-left-color: var(--good); }
+.dis-row.lvl-medium { border-left-color: #ffb02e; }
+.dis-row.lvl-high { border-left-color: #ff3b4f; }
+.dis-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 13px; color: var(--text); }
+.dis-level { flex-shrink: 0; font: 800 11px 'Inter', sans-serif; letter-spacing: 0.05em; padding: 2px 8px; border-radius: 999px; border: 1px solid; white-space: nowrap; }
+.dis-level.lvl-low { color: var(--good); border-color: rgba(124, 255, 107, 0.4); background: rgba(124, 255, 107, 0.08); }
+.dis-level.lvl-medium { color: #ffb02e; border-color: rgba(255, 176, 46, 0.5); background: rgba(255, 176, 46, 0.1); }
+.dis-level.lvl-high { color: #ff7a87; border-color: rgba(255, 59, 79, 0.55); background: rgba(255, 59, 79, 0.12); }
+.dis-why, .dis-tip { margin: 3px 0 0; font-size: 12.5px; line-height: 1.4; color: var(--text-2); hyphens: auto; }
+.dis-tip { color: var(--text); }
+.risk-disease { border-left-color: #b478ff; }

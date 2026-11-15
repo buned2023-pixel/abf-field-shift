@@ -1,0 +1,41 @@
+{
+  "_about": "Crop disease risk for ABF Field Shift. APPROXIMATE thresholds from general plant-pathology guidance, not calibrated for Tajikistan: confirm with a local agronomist. Weather = NASA POWER daily T2M (°C), RH2M (%), PRECTOTCORR (mm/day) for the last 30 days at the field centre. A 'favourable day' has a mean temperature inside temp[] and relative humidity at or above rhMin (rhMin 0 = temperature only). Points: favourable days >= daysHigh → 2, >= daysMedium → 1; 30-day rain >= rainMm → +1 (rainMm null = rain not needed); current month in months[] → +1, otherwise −1. Level: points >= levels.high → HIGH, >= levels.medium → MEDIUM, else LOW. Names and tips shown in the app come from the locale files (dis.<id>.name / dis.<id>.tip); the English here is for reference.",
+  "approximate": true,
+  "note": "approximate, confirm with a local agronomist",
+  "levels": { "medium": 2, "high": 3 },
+  "minDays": 10,
+  "crops": {
+    "wheat": ["yellow_rust", "septoria"],
+    "barley": ["net_blotch", "powdery_mildew"],
+    "maize": ["leaf_blight", "common_rust"],
+    "potato": ["late_blight", "early_blight"],
+    "onion": ["onion_downy", "purple_blotch"],
+    "tomato": ["late_blight", "early_blight"],
+    "chickpea": ["ascochyta", "fusarium_wilt"],
+    "lentil": ["ascochyta", "lentil_rust"],
+    "alfalfa": ["alfalfa_downy", "leaf_spot"],
+    "cotton": ["verticillium", "alternaria"],
+    "apricot": ["brown_rot", "shot_hole"]
+  },
+  "diseases": {
+    "yellow_rust":    { "name": "Yellow (stripe) rust",       "temp": [5, 18],  "rhMin": 85, "daysMedium": 6,  "daysHigh": 12, "rainMm": null, "months": [3, 4, 5, 6],     "tip": "Grow resistant varieties and check leaves weekly in spring for yellow stripes." },
+    "septoria":       { "name": "Septoria leaf blotch",       "temp": [15, 25], "rhMin": 85, "daysMedium": 5,  "daysHigh": 10, "rainMm": 30,   "months": [3, 4, 5, 6],     "tip": "Do not sow wheat after wheat; bury or remove infected straw." },
+    "net_blotch":     { "name": "Net blotch",                 "temp": [15, 25], "rhMin": 85, "daysMedium": 5,  "daysHigh": 10, "rainMm": 25,   "months": [3, 4, 5, 6],     "tip": "Use clean seed and rotate with a non-cereal crop." },
+    "powdery_mildew": { "name": "Powdery mildew",             "temp": [15, 22], "rhMin": 70, "daysMedium": 8,  "daysHigh": 15, "rainMm": null, "months": [3, 4, 5, 6],     "tip": "Avoid too much nitrogen fertiliser and too dense sowing." },
+    "leaf_blight":    { "name": "Northern leaf blight",       "temp": [18, 27], "rhMin": 90, "daysMedium": 4,  "daysHigh": 8,  "rainMm": 40,   "months": [6, 7, 8, 9],     "tip": "Plough in old maize stalks and rotate with a legume." },
+    "common_rust":    { "name": "Common rust",                "temp": [16, 25], "rhMin": 90, "daysMedium": 4,  "daysHigh": 8,  "rainMm": null, "months": [6, 7, 8, 9],     "tip": "Choose resistant hybrids and sow early." },
+    "late_blight":    { "name": "Late blight",                "temp": [10, 25], "rhMin": 90, "daysMedium": 3,  "daysHigh": 6,  "rainMm": 30,   "months": [5, 6, 7, 8, 9],  "tip": "Water the soil, not the leaves; remove sick plants at once." },
+    "early_blight":   { "name": "Early blight",               "temp": [24, 30], "rhMin": 80, "daysMedium": 5,  "daysHigh": 10, "rainMm": null, "months": [6, 7, 8, 9],     "tip": "Remove lower spotted leaves and keep plants well fed." },
+    "onion_downy":    { "name": "Downy mildew",               "temp": [10, 22], "rhMin": 90, "daysMedium": 3,  "daysHigh": 6,  "rainMm": null, "months": [4, 5, 6, 7],     "tip": "Plant in sunny, airy rows and avoid evening watering." },
+    "purple_blotch":  { "name": "Purple blotch",              "temp": [21, 30], "rhMin": 80, "daysMedium": 4,  "daysHigh": 8,  "rainMm": 20,   "months": [5, 6, 7, 8],     "tip": "Keep rows wide and remove old onion leaves after harvest." },
+    "ascochyta":      { "name": "Ascochyta blight",           "temp": [15, 25], "rhMin": 85, "daysMedium": 4,  "daysHigh": 8,  "rainMm": 30,   "months": [3, 4, 5, 6],     "tip": "Sow healthy seed and keep 3 years between legume crops on one field." },
+    "fusarium_wilt":  { "name": "Fusarium wilt",              "temp": [25, 32], "rhMin": 0,  "daysMedium": 10, "daysHigh": 20, "rainMm": null, "months": [5, 6, 7],        "tip": "Use wilt-resistant varieties and rotate for several years." },
+    "lentil_rust":    { "name": "Lentil rust",                "temp": [17, 25], "rhMin": 85, "daysMedium": 4,  "daysHigh": 8,  "rainMm": null, "months": [4, 5, 6],        "tip": "Sow early and use resistant varieties." },
+    "alfalfa_downy":  { "name": "Downy mildew",               "temp": [10, 20], "rhMin": 90, "daysMedium": 3,  "daysHigh": 6,  "rainMm": null, "months": [3, 4, 5, 6],     "tip": "Cut early when you see pale leaves; the next growth is usually clean." },
+    "leaf_spot":      { "name": "Common leaf spot",           "temp": [15, 25], "rhMin": 85, "daysMedium": 5,  "daysHigh": 10, "rainMm": 25,   "months": [4, 5, 6, 7, 8, 9], "tip": "Cut on time so fallen sick leaves do not pile up." },
+    "verticillium":   { "name": "Verticillium wilt",          "temp": [20, 28], "rhMin": 0,  "daysMedium": 12, "daysHigh": 22, "rainMm": null, "months": [6, 7, 8, 9],     "tip": "Rotate with wheat or alfalfa and avoid too much watering." },
+    "alternaria":     { "name": "Alternaria leaf spot",       "temp": [25, 30], "rhMin": 80, "daysMedium": 4,  "daysHigh": 8,  "rainMm": 20,   "months": [7, 8, 9],        "tip": "Give balanced fertiliser (enough potassium) and avoid water stress." },
+    "brown_rot":      { "name": "Brown rot (Monilinia)",      "temp": [15, 25], "rhMin": 85, "daysMedium": 3,  "daysHigh": 6,  "rainMm": 20,   "months": [3, 4, 5, 6, 7],  "tip": "Remove mummified fruit and dead twigs; prune for open crowns." },
+    "shot_hole":      { "name": "Shot hole",                  "temp": [15, 25], "rhMin": 85, "daysMedium": 4,  "daysHigh": 8,  "rainMm": 30,   "months": [3, 4, 5, 10, 11], "tip": "Cut out spotted shoots and spray copper after leaf fall." }
+  }
+}

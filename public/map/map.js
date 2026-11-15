@@ -1196,6 +1196,10 @@
       const sel = selectedId && fields.get(selectedId);
       window.FieldClimate.setField(sel && sel.geo ? { id: selectedId, name: sel.name, centroid: sel.geo.centroid } : null);
     }
+    if (window.FieldDisease) {
+      const sel = selectedId && fields.get(selectedId);
+      window.FieldDisease.setField(sel && sel.geo ? { id: selectedId, centroid: sel.geo.centroid } : null);
+    }
     if (window.FieldWater) {
       const sel = selectedId && fields.get(selectedId);
       window.FieldWater.setField(sel && sel.geo ? { id: selectedId, feature: featureOf(selectedId), geo: sel.geo } : null);
@@ -1277,7 +1281,8 @@
     window.FieldPlants.init(map, plantOptions);
     window.FieldTrees.init(map, plantOptions);
     window.FieldClimate.init(map, { rerender: () => render() }); // Stage 2: fire layer, timeline, risk badges
-    window.FieldWater.init(map, { rerender: () => render() }); // nearest river/canal/lake for the crop advisor
+    window.FieldWater.init(map, { rerender: () => render() });
+    window.FieldDisease.init({ rerender: () => render() }); // crop disease risk from the last 30 days of NASA POWER // nearest river/canal/lake for the crop advisor
     // Stage 3: crop advisor. Its top crop sets the colour and height of the field's 3D crop rows.
     window.FieldAdvisor.init({
       rerender: () => render(),
