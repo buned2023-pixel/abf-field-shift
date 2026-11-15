@@ -4,7 +4,7 @@
 built for the NASA Space Apps Challenge 2026. A farmer draws a field on a 3D terrain map and gets
 drought, heat, fire and crop disease warnings, 20 years of climate charts, and a crop plan with water facts.
 
-**Live demo:** [LIVE LINK PLACEHOLDER]
+**Live demo:** https://abf-field-shift.onrender.com
 
 > Advisory tool. Not an official NASA product.
 > Risk levels and crop advice come from simple, open rules. Confirm with a local agronomist.
