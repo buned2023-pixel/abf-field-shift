@@ -1,0 +1,241 @@
+/*
+ * Screen layout and readability (loaded last, overrides map.css / climate.css).
+ * Fixed zones, never overlapping, at least 12 px apart:
+ *   top bar · left: layers · right: field overview + crop advisor · bottom: climate charts
+ *   · draw toolbar bottom-centre of the map, always above the charts.
+ */
+:root {
+  --gap: 12px;
+  --top-h: 60px;                       /* top bar height */
+  --tl-h: 300px;                       /* charts panel, open */
+  --tl-c: 52px;                        /* charts panel, closed (header only) */
+  --tool-h: 60px;                      /* draw toolbar height (44 px buttons + padding) */
+  --bz: 0px;                           /* height taken at the bottom by the charts panel */
+  --muted: #9aa4cc;                    /* lighter than before: WCAG AA on the dark panels */
+  --text-2: #c3cae6;
+}
+body.tl-shown { --bz: calc(var(--tl-c) + var(--gap)); }
+body.tl-open { --bz: calc(var(--tl-h) + var(--gap)); }
+body { font-size: 14px; }
+
+/* ── Top bar: full width ── */
+.topbar { left: var(--gap); right: var(--gap); width: auto; height: var(--top-h); padding: 8px 10px; gap: 10px; }
+.search input, .search input::placeholder { font-size: 15px; }
+.icon-btn { width: 44px; height: 44px; }
+.brand { min-height: 44px; }
+.search { min-height: 44px; }
+.status-line { top: calc(var(--top-h) + 2 * var(--gap)); left: 50%; transform: translateX(-50%); max-width: min(560px, calc(100vw - 2 * var(--gap))); font-size: 13px; padding: 5px 12px; z-index: 16; }
+.toast { top: calc(var(--top-h) + 2 * var(--gap)); font-size: 14px; }
+
+/* ── Map controls: never under a panel ── */
+.maplibregl-ctrl-top-right { top: calc(var(--top-h) + 2 * var(--gap) - 10px) !important; right: calc(var(--gap) - 10px) !important; }
+.maplibregl-ctrl-bottom-left, .maplibregl-ctrl-bottom-right { bottom: calc(var(--bz) + var(--gap) - 10px) !important; transition: bottom 0.2s; }
+.maplibregl-ctrl-group button { width: 44px !important; height: 44px !important; }
+.maplibregl-ctrl-attrib.maplibregl-compact { min-height: 28px; }
+
+/* ── Side panels ── */
+.panel { z-index: 15; }
+.panel-head { min-height: 48px; font-size: 13px; color: var(--text); }
+.panel-head .chev { width: 18px; height: 18px; }
+.panel-body { font-size: 14px; }
+.layers-panel, .overview-panel {
+  top: calc(var(--top-h) + 2 * var(--gap));
+  /* stop above the toolbar row, which sits above the charts panel */
+  max-height: calc(100vh - var(--top-h) - 3 * var(--gap) - var(--bz) - var(--tool-h) - var(--gap));
+}
+body.tl-open .layers-panel, body.tl-open .overview-panel { max-height: calc(100vh - var(--top-h) - 3 * var(--gap) - var(--bz) - var(--tool-h) - var(--gap)); }
+.layers-panel { left: var(--gap); width: 300px; }
+.overview-panel { right: calc(var(--gap) + 50px + var(--gap)); width: 390px; }
+.panel.collapsed { max-height: none; }
+
+/* Layer groups */
+.lg { padding: 4px 0 8px; border-bottom: 1px solid var(--border); }
+.lg:last-of-type { border-bottom: 0; }
+.lg-title { margin: 10px 0 4px; font: 700 12px 'Inter', sans-serif; letter-spacing: 0.1em; text-transform: uppercase; color: var(--field); }
+.lg-legend { margin: 0 0 4px 40px; font-size: 12px; color: var(--text-2); }
+.lg-legend .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin: 0 4px 0 0; vertical-align: -1px; border: 1px solid rgba(255,255,255,0.6); }
+.lg-legend .dot + .dot, .lg-legend .dot:not(:first-child) { margin-left: 8px; }
+.toggle { min-height: 44px; padding: 4px 0; font-size: 14px; }
+.toggle input:disabled + .sw { opacity: 0.4; }
+.label { font-size: 14px; }
+.row { min-height: 44px; margin: 2px 0; }
+.slider-row { min-height: 0; padding: 4px 0; }
+.slider-row input { height: 28px; }
+.mono { font-size: 13px; }
+.plant-status { font-size: 12px; color: var(--muted); }
+.about-note { font-size: 12px; color: var(--muted); }
+
+/* ── Buttons: one size per group, min 44 px, clear states ── */
+.seg { padding: 3px; }
+.seg button { min-height: 40px; min-width: 52px; font-size: 13px; padding: 0 12px; }
+.seg button:hover:not(.on) { background: var(--raise-2); color: var(--text); }
+.btn-sm, .delete-all { min-height: 44px; font-size: 14px; padding: 8px 14px; }
+.btn-sm:disabled, .tool:disabled { opacity: 0.4; cursor: not-allowed; }
+.btn-sm:focus-visible, .tool:focus-visible, .seg button:focus-visible, .panel-head:focus-visible, .tl-head:focus-visible { outline: 2px solid var(--field); outline-offset: 2px; }
+.fl-select { min-height: 44px; font-size: 14px; }
+.fl-act { width: 44px; height: 44px; }
+.btn-sm:active, .tool:active:not(:disabled), .seg button:active { transform: translateY(1px); }
+
+/* ── Draw toolbar: bottom centre, always above the charts panel ── */
+.toolbar { bottom: calc(var(--bz) + var(--gap)); padding: 6px; gap: 6px; z-index: 20; transition: bottom 0.2s; }
+.tool { min-height: 44px; padding: 0 14px; font-size: 14px; }
+.hint, body.tl-open .hint { bottom: calc(var(--bz) + var(--gap) + var(--tool-h) + var(--gap)); font-size: 14px; }
+body.tl-open .toolbar { bottom: calc(var(--bz) + var(--gap)); }
+
+/* ── Climate charts panel (bottom) ── */
+.timeline { left: var(--gap); right: var(--gap); bottom: var(--gap); height: var(--tl-h); z-index: 17; }
+.timeline.collapsed { height: var(--tl-c); }
+.tl-head { width: 100%; min-height: var(--tl-c); border: 0; background: none; color: inherit; cursor: pointer; text-align: left; padding: 6px 14px; font: inherit; display: flex; align-items: center; gap: 12px; }
+.tl-head .chev { margin-left: 4px; color: var(--text-2); transition: transform 0.2s; flex-shrink: 0; }
+.timeline.collapsed .tl-head .chev { transform: rotate(180deg); }
+.tl-title { font-size: 13px; color: var(--text); }
+.tl-title small { font-size: 12px; color: var(--text-2); }
+.tl-legend { font-size: 12px; }
+.tl-body { grid-template-columns: 230px repeat(3, minmax(0, 1fr)); gap: 10px; padding: 0 12px 12px; }
+.tl-chart-head { align-items: flex-start; flex-wrap: wrap; row-gap: 4px; }
+.tl-h { margin: 0; font: 600 15px 'Inter', sans-serif; color: var(--text); }
+.tl-h small { font-size: 12px; font-weight: 500; color: var(--text-2); }
+.tl-stat { margin: 2px 0 4px; min-height: 0; display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 10px; }
+.tl-big { font: 700 26px/1.1 var(--mono); color: var(--text); }
+.tl-big small { font: 600 13px 'Inter', sans-serif; color: var(--text-2); margin-left: 3px; }
+.tl-cmp { font-size: 12px; color: var(--text-2); }
+.tl-trend { font-size: 13px; padding: 3px 10px; }
+.tl-trend span { font-weight: 700; }
+.tl-msg { font-size: 14px; color: var(--text-2); }
+.wx-card .k, .risk-box .k, .metric .k { font-size: 12px; color: var(--text-2); }
+.wx-desc { font-size: 14px; }
+.wx-stats dt { font-size: 12px; color: var(--text-2); }
+.wx-stats dd { font-size: 15px; }
+
+/* ── Field overview: metrics, risk badges, advisor ── */
+.metric .sub, .metric .v small { font-size: 12px; color: var(--text-2); }
+.slope-legend { font-size: 12px; }
+.risk { padding: 8px 10px; }
+.risk-name { font-size: 12px; display: inline-flex; align-items: center; gap: 6px; }
+.risk-level { font: 800 15px 'Inter', sans-serif; letter-spacing: 0.06em; padding: 3px 12px; display: inline-flex; gap: 6px; align-items: center; }
+.risk-say { margin: 6px 0 2px; font-size: 14px; line-height: 1.4; color: var(--text); }
+.risk-more summary, .adv-more summary { cursor: pointer; font-size: 12px; color: var(--accent-text); min-height: 28px; display: flex; align-items: center; }
+.risk-why { font-size: 13px; color: var(--text-2); }
+.adv .k { font-size: 12px; }
+.adv summary { min-height: 44px; }
+.adv-row { min-height: 44px; }
+.adv-chip { font-size: 13px; min-height: 36px; padding: 4px 12px; }
+.adv-crop { padding: 10px; }
+.adv-crop-head { font-size: 15px; }
+.adv-score { font-size: 17px; }
+.adv-score small { font-size: 12px; color: var(--text-2); }
+.adv-bar { height: 8px; }
+.adv-why { margin: 6px 0 0; font-size: 14px; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.adv-water { font-size: 13px; gap: 4px; }
+.adv-water div { flex-wrap: wrap; column-gap: 8px; }
+.adv-water dt { flex: 0 0 132px; display: inline-flex; align-items: center; gap: 4px; }
+.adv-water dd { flex: 1 1 160px; }
+.adv-water small { color: var(--text-2); font-size: 12px; }
+.adv-access { font-size: 12px; padding: 1px 8px; }
+.adv-reasons, .adv-plant, .adv-soil { font-size: 13px; }
+.adv-sub { font-size: 12px; display: flex; align-items: center; gap: 6px; }
+.adv-warn { font-size: 13px; }
+.adv-note { font-size: 13px; }
+.adv-rot li { font-size: 14px; }
+.adv-rot p { font-size: 13px; }
+.adv-year, .adv-n, .adv-tag { font-size: 12px; }
+.land-badge { font-size: 12px; }
+.field-list .fl-area { font-size: 13px; }
+.list-title { font-size: 12px; }
+.empty-state { font-size: 14px; }
+
+/* ── "?" help icons with a one-sentence tooltip (hover, focus or tap) ── */
+.help {
+  position: relative; display: inline-grid; place-items: center; flex-shrink: 0;
+  width: 20px; height: 20px; padding: 0; border-radius: 50%; border: 1px solid var(--border-strong);
+  background: var(--raise); color: var(--text-2); font: 700 12px 'Inter', sans-serif; cursor: help; vertical-align: middle;
+}
+.help::after {
+  content: attr(data-tip); position: absolute; z-index: 60; bottom: calc(100% + 8px); left: 50%; transform: translateX(-50%);
+  width: max-content; max-width: 240px; padding: 8px 10px; border-radius: 8px; white-space: normal; text-align: left;
+  background: #0d1530; border: 1px solid var(--border-strong); color: var(--text); font: 500 13px/1.4 'Inter', sans-serif;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.5); opacity: 0; visibility: hidden; pointer-events: none; transition: opacity 0.15s;
+  text-transform: none; letter-spacing: 0;
+}
+.help:hover::after, .help:focus-visible::after, .help:focus::after { opacity: 1; visibility: visible; }
+.help:hover, .help:focus-visible { color: var(--field); border-color: var(--field); }
+/* tooltips near the right edge open to the left */
+.overview-panel .help::after { left: auto; right: -8px; transform: none; }
+
+/* ── Long words (Russian / Tajik) wrap instead of breaking the layout ── */
+.panel, .timeline, .toolbar, .topbar { overflow-wrap: anywhere; }
+.toggle, .label, .lg-title, .tl-h, .risk-say, .adv-water dd { hyphens: auto; }
+
+/* ── Tablet & phone (under 900 px): panels become bottom sheets, one open at a time ── */
+@media (max-width: 899px) {
+  :root { --gap: 12px; --top-h: 56px; --tab-h: 52px; --sheet-h: min(46vh, calc(100vh - var(--top-h) - 40vh - var(--tool-h) - var(--tab-h) - 4 * var(--gap))); }
+  .brand .abf-tag { display: none; }
+  .tagline { display: none; }
+  /* The three panel headers form one row of tabs at the bottom */
+  .layers-panel, .overview-panel, .timeline {
+    top: auto; bottom: var(--gap); height: auto; max-height: none; width: calc((100vw - 4 * var(--gap)) / 3);
+    border-radius: 14px; transition: none;
+  }
+  .layers-panel { left: var(--gap); right: auto; }
+  .overview-panel { left: calc(2 * var(--gap) + (100vw - 4 * var(--gap)) / 3); right: auto; }
+  .timeline { left: auto; right: var(--gap); }
+  .panel-head, .tl-head { min-height: var(--tab-h); padding: 6px 10px; font-size: 12px; justify-content: center; text-align: center; gap: 6px; }
+  .panel-head > span, .tl-title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tl-title small, .tl-title .tl-stale, .tl-legend { display: none; }
+  .timeline.collapsed { height: var(--tab-h); }
+  .layers-panel.collapsed .panel-body, .overview-panel.collapsed .panel-body, .timeline.collapsed .tl-body { display: none; }
+  /* The open one becomes a full-width sheet above the tab row, with a drag-handle look */
+  .layers-panel:not(.collapsed), .overview-panel:not(.collapsed), .timeline:not(.collapsed) {
+    left: var(--gap); right: var(--gap); width: auto; bottom: var(--gap); z-index: 18;
+    height: calc(var(--sheet-h) + var(--tab-h)); max-height: none; display: flex; flex-direction: column;
+  }
+  .panel:not(.collapsed) .panel-body, .timeline:not(.collapsed) .tl-body { flex: 1; min-height: 0; overflow-y: auto; }
+  .panel:not(.collapsed) .panel-head::before, .timeline:not(.collapsed) .tl-head::before {
+    content: ''; position: absolute; top: 6px; left: 50%; width: 40px; height: 4px; margin-left: -20px; border-radius: 2px; background: var(--border-strong);
+  }
+  .panel-head, .tl-head { position: relative; }
+  /* Sheet open: the other tabs hide behind it, the toolbar sits above it */
+  body.sheet-open .panel.collapsed, body.sheet-open .timeline.collapsed { visibility: hidden; }
+  .toolbar, body.tl-open .toolbar { bottom: calc(var(--gap) + var(--tab-h) + var(--gap)); max-width: calc(100vw - 2 * var(--gap)); }
+  body.sheet-open .toolbar { bottom: calc(var(--gap) + var(--tab-h) + var(--sheet-h) + var(--gap)); }
+  .hint, body.tl-open .hint { bottom: auto; top: calc(var(--top-h) + 2 * var(--gap)); }
+  body { --bz: calc(var(--tab-h) + var(--gap)); }
+  body.sheet-open { --bz: calc(var(--tab-h) + var(--sheet-h) + var(--gap)); }
+  .maplibregl-ctrl-bottom-left, .maplibregl-ctrl-bottom-right { bottom: calc(var(--bz) + var(--tool-h) + var(--gap)) !important; }
+  .tl-body { grid-template-columns: 1fr; grid-auto-flow: row; grid-auto-columns: auto; overflow-x: hidden; }
+  .tl-chart { min-height: 220px; }
+  .wx-card { min-height: 0; }
+  .status-line { top: calc(var(--top-h) + 2 * var(--gap)); }
+}
+@media (max-width: 480px) {
+  .tool { padding: 0 10px; }
+  .tool span { display: none; }
+  .tool.primary span { display: inline; }
+  .adv-water dt { flex-basis: 100%; }
+  .adv-why { white-space: normal; }
+}
+
+/* Minimum 12 px for every small label */
+.panel small, .timeline small, .adv-rank, .note, .wx-temp small, .count, .adv-pref .label small, .slope-legend span { font-size: 12px !important; }
+.adv-rank { width: 22px; height: 22px; }
+.brand .abf-tag { font-size: 12px; }
+/* Status text lives inside the top bar on wide screens (never over a panel) */
+.topbar .status-line { position: static; transform: none; flex: 0 1 auto; max-width: 32%; min-width: 0; border: 0; background: none; padding: 0 4px; font-size: 13px; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+@media (max-width: 899px) {
+  .topbar .status-line { position: fixed; top: calc(var(--top-h) + 2 * var(--gap)); left: 50%; transform: translateX(-50%); max-width: calc(100vw - 2 * var(--gap)); background: var(--panel); border: 1px solid var(--border); border-radius: 999px; padding: 4px 12px; font-size: 12px; }
+}
+@media (max-width: 899px) {
+  /* Charts sheet: stack the weather card and the charts, each at its natural height */
+  .tl-body { grid-auto-rows: max-content; align-content: start; }
+  .wx-card { min-height: max-content; }
+  .tl-chart { height: 240px; }
+}
+@media (max-width: 899px) {
+  /* +2 px: the tab row's border, so the toolbar keeps a full 12 px gap */
+  .toolbar, body.tl-open .toolbar { bottom: calc(var(--gap) + var(--tab-h) + 2px + var(--gap)); }
+  body.sheet-open .toolbar { bottom: calc(var(--gap) + var(--tab-h) + var(--sheet-h) + 2px + var(--gap)); }
+}
+@media (max-width: 899px) {
+  .maplibregl-ctrl-bottom-left, .maplibregl-ctrl-bottom-right { bottom: calc(var(--bz) + var(--tool-h) + var(--gap) + 4px) !important; }
+}
+@media (max-width: 420px) { .search input::placeholder { font-size: 13px; } .topbar { gap: 6px; } .brand { padding-right: 2px; } }

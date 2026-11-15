@@ -30,7 +30,7 @@
 
   const $ = (id) => document.getElementById(id);
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-  const fmt = (n, d = 0) => (n == null || !isFinite(n) ? '–' : Number(n).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d }));
+  const fmt = (n, d = 0) => (n == null || !isFinite(n) ? 'No data' : Number(n).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d }));
   const signed = (n, d = 0) => (n > 0 ? '+' : n < 0 ? '−' : '') + fmt(Math.abs(n), d);
   const mean = (a) => { const v = a.filter((x) => x != null && isFinite(x)); return v.length ? v.reduce((s, x) => s + x, 0) / v.length : null; };
   const daysIn = (y, m) => new Date(y, m, 0).getDate();
@@ -187,27 +187,49 @@
   }
 
   // ── Badges (shown in the Field overview) ──
-  const BADGES = [['drought', 'Drought', 'powerErr'], ['heat', 'Heat', 'powerErr'], ['fire', 'Fire', 'firmsErr']];
+  const help = (tip) => `<button type="button" class="help" data-tip="${esc(tip)}" aria-label="Help: ${esc(tip)}">?</button>`;
+  const BADGES = [
+    ['drought', 'Drought risk', 'powerErr', 'Chance that the field gets too little water, from 20 years of rain and soil-moisture data.'],
+    ['heat', 'Heat risk', 'powerErr', 'Chance that plants are stressed by heat, from recent hot months and the temperature now.'],
+    ['fire', 'Fire risk', 'firmsErr', 'Chance of fire near the field, from fires seen by satellites in the last 10 days plus dry, hot weather.'],
+  ];
   const LEVEL_ICON = { low: '✓', medium: '!', high: '▲' };
+  // What the level means and what to do, in plain words
+  const ADVICE = {
+    drought: { low: 'Enough rain and soil water now. Normal watering is fine.', medium: 'Drier than usual. Water a bit more often and keep the soil covered.', high: 'Very dry. Choose crops that need little water and plan irrigation.' },
+    heat: { low: 'Temperatures are normal for this place.', medium: 'Hotter than usual. Water early in the morning and avoid work at midday.', high: 'Very hot. Shade young plants, water morning or evening, protect workers.' },
+    fire: { low: 'No fires close to this field.', medium: 'Fires were seen in the area. Clear dry grass around the field.', high: 'Fires are close. Remove dry plants, keep water ready, watch for smoke.' },
+  };
   function badgesHtml(fieldId) {
     if (!current || current.id !== fieldId) return '';
-    const rows = BADGES.map(([key, label, errKey]) => {
+    const rows = BADGES.map(([key, label, errKey, tip]) => {
       const r = state.risks && state.risks[key];
+      const head = (lvl) => `<div class="risk-head"><span class="risk-name">${label} ${help(tip)}</span>${lvl}</div>`;
       if (r) {
-        return `<div class="risk risk-${key} lvl-${r.level}"><div class="risk-head"><span class="risk-name">${label}</span><span class="risk-level">${LEVEL_ICON[r.level]} ${r.level}</span></div><p class="risk-why">${esc(r.why)}</p></div>`;
+        return `<div class="risk risk-${key} lvl-${r.level}">${head(`<span class="risk-level"><span aria-hidden="true">${LEVEL_ICON[r.level]}</span> ${r.level.toUpperCase()}</span>`)}` +
+          `<p class="risk-say">${esc(ADVICE[key][r.level])}</p><details class="risk-more"><summary>Details from NASA data</summary><p class="risk-why">${esc(r.why)}</p></details></div>`;
       }
-      const msg = state[errKey] ? 'NASA data is unavailable right now.' : 'Loading NASA data…';
-      return `<div class="risk risk-${key} lvl-none"><div class="risk-head"><span class="risk-name">${label}</span><span class="risk-level">…</span></div><p class="risk-why">${msg}</p></div>`;
+      const msg = state[errKey] ? 'No data right now: the NASA service could not be reached.' : 'Loading NASA data…';
+      return `<div class="risk risk-${key} lvl-none">${head('<span class="risk-level">…</span>')}<p class="risk-say">${msg}</p></div>`;
     }).join('');
     return `<div class="metric wide risk-box"><div class="k">Risks for this field</div>${rows}</div>`;
   }
 
   // ── Timeline panel ──
-  function trendBadge(t) {
-    const arrow = t.dir === 'increasing' ? '▲' : t.dir === 'decreasing' ? '▼' : '■';
-    const sig = t.dir === 'stable' ? '' : t.significant ? ' · significant' : ' · not significant';
-    return `<span class="tl-trend ${t.dir}" title="${esc(rules.trend.significance.label)}">${arrow} ${t.dir}${sig}</span>`;
+  // Trend as an arrow + plain word: "Getting drier", "Getting warmer", "Stable"
+  const TREND_WORDS = {
+    rain: { increasing: 'Getting wetter', decreasing: 'Getting drier' },
+    temp: { increasing: 'Getting warmer', decreasing: 'Getting cooler' },
+    soil: { increasing: 'Soil getting wetter', decreasing: 'Soil getting drier' },
+  };
+  function trendBadge(t, key) {
+    const arrow = t.dir === 'increasing' ? '↗' : t.dir === 'decreasing' ? '↘' : '→';
+    const word = t.dir === 'stable' ? 'Stable' : TREND_WORDS[key][t.dir];
+    const sure = t.dir === 'stable' ? '' : t.significant ? ' (clear trend)' : ' (weak trend)';
+    return `<span class="tl-trend ${t.dir}"><span aria-hidden="true">${arrow}</span> ${word}</span>` +
+      help(`Trend = the direction over 20 years, from a straight line through the yearly values${sure ? '. "' + sure.trim().slice(1, -1) + '": ' + (t.significant ? 'the change is bigger than normal year-to-year ups and downs' : 'the change could be normal year-to-year variation') : ''}.`);
   }
+  const SOIL_WORD = (v) => (v == null ? '' : v < 0.35 ? 'dry' : v > 0.6 ? 'wet' : 'normal');
 
   function renderWeather() {
     const el = $('wxCard');
@@ -216,14 +238,15 @@
     if (state.weatherErr) { el.innerHTML = '<div class="k">Weather now</div><p class="tl-msg">The weather service could not be reached. <button type="button" class="btn-sm tl-retry">Try again</button></p>'; return; }
     if (!w) { el.innerHTML = '<div class="k">Weather now</div><p class="tl-msg">Loading…</p>'; return; }
     const icon = w.icon && /^https:\/\//.test(w.icon) ? `<img src="${esc(w.icon)}" alt="" width="44" height="44">` : '';
+    const unitIf = (v, u) => (v == null || !isFinite(v) ? '' : `<small>${u}</small>`);
     el.innerHTML = `
       <div class="k">Weather now${w.place ? ' · ' + esc(w.place) : ''}</div>
-      <div class="wx-main">${icon}<div><div class="wx-temp">${fmt(w.temperature)}<small>°C</small></div><div class="wx-desc">${esc(w.description || '')}</div></div></div>
+      <div class="wx-main">${icon}<div><div class="wx-temp">${fmt(w.temperature)}${unitIf(w.temperature, '°C')}</div><div class="wx-desc">${esc((w.description || '').trim())}</div></div></div>
       <dl class="wx-stats">
-        <div><dt>Humidity</dt><dd>${fmt(w.humidity)}<small>%</small></dd></div>
-        <div><dt>Wind</dt><dd>${fmt(w.windSpeed)}<small>km/h ${esc(w.windDir || '')}</small></dd></div>
-        <div><dt>Feels like</dt><dd>${fmt(w.feelsLike)}<small>°C</small></dd></div>
-        <div><dt>Rain</dt><dd>${fmt(w.precip, 1)}<small>mm</small></dd></div>
+        <div><dt>Humidity</dt><dd>${fmt(w.humidity)}${unitIf(w.humidity, '%')}</dd></div>
+        <div><dt>Wind</dt><dd>${fmt(w.windSpeed)}${unitIf(w.windSpeed, 'km/h')}</dd></div>
+        <div><dt>Feels like</dt><dd>${fmt(w.feelsLike)}${unitIf(w.feelsLike, '°C')}</dd></div>
+        <div><dt>Rain today</dt><dd>${fmt(w.precip, 1)}${unitIf(w.precip, 'mm')}</dd></div>
       </dl>`;
   }
 
@@ -244,11 +267,11 @@
       msg.hidden = true;
       const t = a.trends[c.key], ty = a.thisYear, cmp = ty[c.key];
       const unit = c.key === 'rain' ? ' mm' : c.key === 'temp' ? ' °C' : '';
-      head.innerHTML = trendBadge(t);
-      const change = c.key === 'temp' ? `${signed(t.perDecade, 2)} °C` : `${signed(t.pct, 1)}%`;
+      head.innerHTML = trendBadge(t, c.key);
       const gap = c.key === 'temp' ? `${signed(cmp.diff, 1)} °C` : `${signed(cmp.pct)}%`;
-      stat.innerHTML = `<b>${fmt(t.mean, c.dec)}${unit}</b> 20-year average · ${change} per decade<br>` +
-        `<span class="tl-now">● ${ty.year}${ty.partial ? ` (${esc(ty.span)})` : ''}: ${fmt(cmp.now, c.dec)}${unit} vs ${fmt(cmp.norm, c.dec)}${unit} normal for the same months (${gap})</span>`;
+      const big = c.key === 'soil' ? `${fmt(cmp.now, 2)} <small>${SOIL_WORD(cmp.now)}</small>` : `${fmt(cmp.now, c.dec)}<small>${unit}</small>`;
+      stat.innerHTML = `<span class="tl-big">${big}</span>` +
+        `<span class="tl-cmp">${ty.year}${ty.partial ? ` (${esc(ty.span)})` : ''} · usual for these months: ${fmt(cmp.norm, c.dec)}${unit} (${gap})</span>`;
       const labels = ty.year > a.years[a.years.length - 1] ? [...a.years, ty.year] : a.years.slice();
       const pad = labels.length - a.years.length;
       const yearlyData = [...a.yearly[c.key], ...Array(pad).fill(null)];
@@ -261,7 +284,6 @@
           datasets: [
             { label: 'Yearly value', data: yearlyData, borderColor: c.color, backgroundColor: c.color + '22', borderWidth: 2, pointRadius: 2, pointHoverRadius: 5, pointBackgroundColor: c.color, fill: true, tension: 0.3, spanGaps: true },
             { label: 'Trend', data: trendData, borderColor: '#eaeeff', borderWidth: 1.5, borderDash: [6, 4], pointRadius: 0, pointHoverRadius: 0, fill: false },
-            { label: '20-year average', data: labels.map(() => t.mean), borderColor: 'rgba(170,180,218,0.7)', borderWidth: 1, borderDash: [2, 3], pointRadius: 0, pointHoverRadius: 0, fill: false },
             { label: `${ty.year}${ty.partial ? ' (same-month comparison)' : ''}`, data: nowData, borderColor: '#D4F20C', backgroundColor: '#D4F20C', pointRadius: 6, pointHoverRadius: 8, pointBorderColor: '#0A1020', pointBorderWidth: 2, showLine: false },
           ],
         },
@@ -404,13 +426,7 @@
       if (!e.target.closest || !e.target.closest('.tl-retry') || !current) return;
       load(current);
     });
-    const tgl = $('tlToggle');
-    if (tgl) tgl.addEventListener('click', () => {
-      const collapsed = $('timeline').classList.toggle('collapsed');
-      tgl.setAttribute('aria-expanded', String(!collapsed));
-      document.body.classList.toggle('tl-open', !!current && !collapsed);
-      if (!collapsed) renderCharts();
-    });
+    // Open/close of the charts panel is handled by ui.js
     try { rules = await getJson('/api/risk-rules', 15000); }
     catch (_) { rules = null; console.warn('[climate] risk rules unavailable'); return; }
     if (opts.rerender) opts.rerender(); // pick up a field that was selected before the rules arrived

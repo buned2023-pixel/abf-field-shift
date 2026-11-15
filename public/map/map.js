@@ -30,7 +30,7 @@
   // ─── Helpers ───────────────────────────────────────────────────────────────
   const $ = (id) => document.getElementById(id);
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-  const fmt = (n, d = 0) => (n == null || !isFinite(n) ? '–' : Number(n).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d }));
+  const fmt = (n, d = 0) => (n == null || !isFinite(n) ? 'No data' : Number(n).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d }));
   const isMobile = () => window.matchMedia('(max-width: 760px)').matches;
   const uuid = () => (crypto.randomUUID ? crypto.randomUUID() : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
     const r = (Math.random() * 16) | 0; return (c === 'x' ? r : (r & 0x3) | 0x8).toString(16);
@@ -85,6 +85,11 @@
       },
       // Separate DEM source for hillshade (recommended by MapLibre for quality)
       hillshadeDem: { type: 'raster-dem', tiles: [TERRARIUM], encoding: 'terrarium', tileSize: 256, maxzoom: DEM_MAXZOOM },
+      // OpenStreetMap vector tiles (OpenFreeMap via our proxy) for rivers, canals and lakes
+      osm: {
+        type: 'vector', tiles: [`${location.origin}/tiles/osm/{z}/{x}/{y}.pbf`], minzoom: 0, maxzoom: 14,
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors · <a href="https://openfreemap.org" target="_blank" rel="noopener">OpenFreeMap</a>',
+      },
       nodraw: { type: 'geojson', data: { type: 'FeatureCollection', features: [] } },
       blockedParts: { type: 'geojson', data: { type: 'FeatureCollection', features: [] } },
       fieldGlow: { type: 'geojson', data: { type: 'FeatureCollection', features: [] } },
@@ -101,8 +106,9 @@
         paint: {
           'color-relief-opacity': COLOR_BASE.tintNoImagery, // imagery is off by default: the tint is the ground colour
           'color-relief-color': ['interpolate', ['linear'], ['elevation'],
-            300, '#5f8f58', 900, '#7a9c62', 1500, '#b9a23c', 2200, '#d09a3a',
-            2800, '#8c7460', 3300, '#9a8b80', 3500, '#f2f4f8', 4500, '#ffffff'],
+            // Muted, earthy: sage valleys → tan mid slopes → warm brown → grey-brown rock → snow
+            300, '#8a9670', 900, '#949675', 1500, '#a39373', 2200, '#9a8268',
+            2800, '#887766', 3300, '#9b928a', 3500, '#eef0f2', 4500, '#ffffff'],
         },
       },
       {
@@ -141,6 +147,34 @@
           'hillshade-accent-color': 'rgba(8, 14, 40, 0.5)',
         },
       },
+      // ── Water. Fill and line layers are draped onto the 3D terrain (drawn into the terrain's own
+      // texture), so they sit exactly on the ground and cannot flicker when the view rotates.
+      // Lakes and reservoirs: flat clean blue with a lighter shoreline.
+      {
+        id: 'water-fill', type: 'fill', source: 'osm', 'source-layer': 'water',
+        filter: ['!=', ['get', 'class'], 'swimming_pool'],
+        paint: { 'fill-color': '#4a8fca', 'fill-opacity': 0.95, 'fill-antialias': true },
+      },
+      {
+        id: 'water-shore', type: 'line', source: 'osm', 'source-layer': 'water', minzoom: 11,
+        filter: ['!=', ['get', 'class'], 'swimming_pool'],
+        layout: { 'line-join': 'round' },
+        paint: { 'line-color': '#8cc0e6', 'line-width': ['interpolate', ['linear'], ['zoom'], 11, 0.6, 15, 2], 'line-opacity': 0.8 },
+      },
+      // Rivers > canals > streams/ditches. Width grows with zoom: thin at 10, wider from 14.
+      // Three passes: soft darker edge, clean blue body, lighter centre line.
+      ...[['waterway-edge', '#2f6fa6', 1.6, 1.2, 0.85], ['waterway', '#4a90cc', 1, 0, 1], ['waterway-center', '#a6d0f0', 0.32, 0, 0.9]].map(([id, color, k, blur, opacity]) => ({
+        id, type: 'line', source: 'osm', 'source-layer': 'waterway', minzoom: 10,
+        filter: ['all', ['match', ['get', 'class'], ['river', 'canal', 'stream', 'ditch', 'drain'], true, false], ['!=', ['get', 'brunnel'], 'tunnel']],
+        layout: { 'line-cap': 'round', 'line-join': 'round' },
+        paint: {
+          'line-color': color, 'line-blur': blur, 'line-opacity': opacity,
+          'line-width': ['interpolate', ['exponential', 1.6], ['zoom'],
+            10, ['*', k, ['match', ['get', 'class'], 'river', 1.2, 'canal', 0.7, 0.4]],
+            14, ['*', k, ['match', ['get', 'class'], 'river', 5, 'canal', 2.6, 1.4]],
+            17, ['*', k, ['match', ['get', 'class'], 'river', 16, 'canal', 8, 4]]],
+        },
+      })),
       ...(contourUrl ? [
         {
           id: 'contours', type: 'line', source: 'contours', 'source-layer': 'contours', minzoom: 11,
@@ -205,7 +239,7 @@
     bearing: BEARING_3D,
     maxPitch: 85,
     maxZoom: 19,
-    attributionControl: { compact: isMobile() },
+    attributionControl: { compact: true }, // an (i) button, so the credits never cover the panels
     // Performance on phones: smaller tile cache (and lower DEM zoom, above).
     // Note: don't override pixelRatio — with 3D terrain, a pixel ratio different from the
     // screen's makes MapLibre read its terrain depth buffer at the wrong pixel, so clicks land off.
@@ -281,15 +315,9 @@
     $('lyrContours').addEventListener('change', (e) => { setLayerVisible('contours', e.target.checked); setLayerVisible('contour-labels', e.target.checked); });
     $('lyrZones').addEventListener('change', () => updateZonesVisibility());
     if (!contourUrl) { $('lyrContours').disabled = true; $('lyrContours').closest('label').title = 'Contours unavailable'; }
-    document.querySelectorAll('[data-toggle]').forEach((btn) => btn.addEventListener('click', () => {
-      const panel = $(btn.dataset.toggle);
-      const collapsed = panel.classList.toggle('collapsed');
-      btn.setAttribute('aria-expanded', String(!collapsed));
-    }));
-    if (isMobile()) {
-      $('layersPanel').classList.add('collapsed');
-      $('layersPanel').querySelector('.panel-head').setAttribute('aria-expanded', 'false');
-    }
+    // Rivers, canals and lakes on/off
+    $('lyrWater').addEventListener('change', (e) => ['water-fill', 'water-shore', 'waterway-edge', 'waterway', 'waterway-center'].forEach((l) => setLayerVisible(l, e.target.checked)));
+    // Panel open/close is handled by ui.js (one click, remembered, one sheet at a time on phones)
   }
 
   // ─── Location & search ─────────────────────────────────────────────────────
@@ -1057,7 +1085,7 @@
     const canTrim = (land.status === 'minor' || land.status === 'blocked') && landParts.has(id);
     const canRetry = land.status === 'unverified';
     return `<div class="metric wide land-row ${LAND_BADGE[land.status] ? LAND_BADGE[land.status].cls : ''}">
-        <div class="k">Land check</div>
+        <div class="k">Can this land be farmed?</div>
         <div class="land-line">${landBadge(land)}</div>
         <div class="sub">${esc(detail)}</div>
         ${canTrim ? '<button class="btn-sm trim-btn" id="trimBtn" type="button">Trim the field automatically</button>' : ''}
@@ -1083,16 +1111,16 @@
     if (field.terrainError) {
       terrainHtml = '<div class="metric wide"><div class="k">Terrain</div><div class="sub">Elevation data could not be loaded. Check your connection and edit the field to retry.</div></div>';
     } else if (!t) {
-      terrainHtml = metric('Mean elevation', null) + metric('Mean slope', null) + metric('Aspect', null, null, true);
+      terrainHtml = metric('Height above sea', null) + metric('Average slope', null) + metric('Slope faces', null, null, true);
     } else {
       const bars = t.slopeShare.map((s, i) => s > 0 ? `<span style="flex:${s};background:${SLOPE_CLASSES[i].color}" title="${SLOPE_CLASSES[i].label}: ${fmt(s * 100)}%"></span>` : '').join('');
       const legend = t.slopeShare.map((s, i) => s >= 0.005 ? `<span><i style="background:${SLOPE_CLASSES[i].color}"></i>${SLOPE_CLASSES[i].label} ${fmt(s * 100)}%</span>` : '').join('');
       const aspectSub = t.aspect === 'flat' ? 'Too flat to face a direction' : t.aspect === 'mixed' ? 'Slopes face several directions' : `Slope faces ${fmt(t.aspectDeg)}° from north`;
       terrainHtml =
-        metric('Mean elevation', `${fmt(t.meanElevation)}<small>m</small>`, `Range ${fmt(t.minElevation)}–${fmt(t.maxElevation)} m`) +
-        metric('Mean slope', `${fmt(t.meanSlope, 1)}<small>°</small>`, `${fmt(Math.tan((t.meanSlope * Math.PI) / 180) * 100, 1)}% grade`) +
-        `<div class="metric wide"><div class="k">Slope distribution</div><div class="slope-bar">${bars}</div><div class="slope-legend">${legend}</div></div>` +
-        `<div class="metric wide"><div class="k">Aspect</div><div class="aspect-wrap">${compassSvg(t.aspectDeg)}<div><div class="v">${ASPECT_NAMES[t.aspect]}</div><div class="sub">${aspectSub}</div></div></div></div>`;
+        metric('Height above sea', `${fmt(t.meanElevation)}<small>m</small>`, `From ${fmt(t.minElevation)} to ${fmt(t.maxElevation)} m`) +
+        metric('Average slope', `${fmt(t.meanSlope, 1)}<small>°</small>`, `${fmt(Math.tan((t.meanSlope * Math.PI) / 180) * 100, 1)}% grade`) +
+        `<div class="metric wide"><div class="k">How steep the field is</div><div class="slope-bar">${bars}</div><div class="slope-legend">${legend}</div></div>` +
+        `<div class="metric wide"><div class="k">Slope faces</div><div class="aspect-wrap">${compassSvg(t.aspectDeg)}<div><div class="v">${ASPECT_NAMES[t.aspect]}</div><div class="sub">${aspectSub}</div></div></div></div>`;
     }
     el.innerHTML = `
       <div class="detail-head"><span class="swatch"></span><input class="name-input" id="nameInput" value="${esc(field.name)}" maxlength="60" aria-label="Field name" /></div>
@@ -1102,7 +1130,7 @@
         ${landHtml(selectedId, field)}
         ${metric('Area', `${fmt(g.areaHa, g.areaHa < 10 ? 2 : 1)}<small>ha</small>`, `${fmt(g.areaHa * 2.47105, 1)} acres`)}
         ${metric('Perimeter', `${fmt(g.perimeterKm < 1 ? g.perimeterKm * 1000 : g.perimeterKm, g.perimeterKm < 1 ? 0 : 2)}<small>${g.perimeterKm < 1 ? 'm' : 'km'}</small>`)}
-        ${metric('Centroid', g.centroid ? `${fmt(g.centroid[1], 5)}, ${fmt(g.centroid[0], 5)}` : '–', 'Latitude, longitude', true)}
+        ${metric('Location', g.centroid ? `${fmt(g.centroid[1], 5)}, ${fmt(g.centroid[0], 5)}` : '–', 'Latitude, longitude', true)}
         ${terrainHtml}
       </div>
       ${t ? `<p class="note">From Terrarium DEM (≈30 m source), ${fmt(t.samples)} samples at ${fmt(t.resolutionM, 1)} m spacing.</p>` : ''}
@@ -1163,6 +1191,10 @@
       const sel = selectedId && fields.get(selectedId);
       window.FieldClimate.setField(sel && sel.geo ? { id: selectedId, name: sel.name, centroid: sel.geo.centroid } : null);
     }
+    if (window.FieldWater) {
+      const sel = selectedId && fields.get(selectedId);
+      window.FieldWater.setField(sel && sel.geo ? { id: selectedId, feature: featureOf(selectedId), geo: sel.geo } : null);
+    }
     renderDetail();
     renderList();
     $('deleteBtn').disabled = !selectedId;
@@ -1216,6 +1248,10 @@
 
   // 'style.load' rather than 'load': at 60° pitch 'load' waits for every horizon tile,
   // which can take many seconds on slow connections. Drawing only needs the style.
+  // Fold the map credits into their (i) button from the start (MapLibre folds them on the first drag),
+  // so they never run into the toolbar
+  map.once('style.load', () => map.fire('drag'));
+  map.once('load', () => map.fire('drag'));
   map.once('style.load', () => {
     addHatch();
     // Slow lime pulse on field outlines (off when there are no fields, or with reduced motion)
@@ -1229,6 +1265,7 @@
     window.FieldPlants.init(map, plantOptions);
     window.FieldTrees.init(map, plantOptions);
     window.FieldClimate.init(map, { rerender: () => render() }); // Stage 2: fire layer, timeline, risk badges
+    window.FieldWater.init(map, { rerender: () => render() }); // nearest river/canal/lake for the crop advisor
     // Stage 3: crop advisor. Its top crop sets the colour and height of the field's 3D crop rows.
     window.FieldAdvisor.init({
       rerender: () => render(),

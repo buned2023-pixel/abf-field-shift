@@ -19,7 +19,8 @@
   let open = true;
 
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-  const fmt = (n, d = 0) => (n == null || !isFinite(n) ? '–' : Number(n).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d }));
+  const fmt = (n, d = 0) => (n == null || !isFinite(n) ? 'No data' : Number(n).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d }));
+  const help = (tip) => `<button type="button" class="help" data-tip="${esc(tip)}" aria-label="Help: ${esc(tip)}">?</button>`;
   const mean = (a) => a.reduce((s, x) => s + x, 0) / a.length;
   const clamp01 = (v) => Math.max(0, Math.min(1, v));
   const list = (arr) => (arr.length <= 1 ? arr.join('') : `${arr.slice(0, -1).join(', ')} and ${arr[arr.length - 1]}`);
@@ -171,12 +172,50 @@
     return out;
   }
 
+  // ── Water for one crop: need, rain, irrigation (1 mm on 1 ha = 10 m³), nearest water ──
+  const dist = (m) => (m < 1000 ? `${fmt(Math.round(m / 10) * 10)} m` : `${fmt(m / 1000, 1)} km`);
+  function waterHtml(crop, rainMm, field, w) {
+    const need = crop.waterNeedMmYear;
+    if (!need) return '';
+    const ha = field.geo.areaHa;
+    const irr = Math.max(0, need - rainMm);
+    let near;
+    if (w.status === 'loading') near = 'looking for the nearest river, canal or lake…';
+    else if (w.status === 'ok') {
+      const what = w.type === 'lake' ? 'lake / reservoir' : w.type;
+      near = w.distanceM === 0 ? `${what} at the field` : `${what}, ${dist(w.distanceM)}`;
+      near += ` <span class="adv-access ${w.access.toLowerCase()}">${w.access}</span>`;
+    } else if (w.status === 'none') near = `none within ${fmt(window.FieldWater.SEARCH_M / 1000)} km <span class="adv-access hard">Hard</span>`;
+    else near = 'unknown';
+    return `
+      <dl class="adv-water">
+        <div><dt>Water needed</dt><dd>${fmt(need)} mm per year <small>(${fmt(need * 10)} m³ per ha, approx.)</small></dd></div>
+        <div><dt>Water from rain</dt><dd>${fmt(rainMm)} mm per year <small>(20-year average)</small></dd></div>
+        <div><dt>Irrigation needed ${help('Water you must add yourself: water needed minus water from rain. 1 mm on 1 hectare = 10 m³.')}</dt><dd>${irr > 0 ? `${fmt(irr)} mm per year <small>= ${fmt(irr * 10 * ha)} m³ per year for this field</small>` : 'None: rain is enough'}</dd></div>
+        <div><dt>Nearest water</dt><dd>${near}</dd></div>
+      </dl>`;
+  }
+
+  // One short line: why this crop fits, or its main limit
+  const LIMITS = [
+    [/^Growing-season temperature/, 'the temperature is outside its best range'], [/^Hottest month/, 'summers are too hot for it'],
+    [/short of/, 'it needs more water than you have'], [/more than its/, 'there is too much rain for it'],
+    [/^Root soil moisture/, 'the soil is too dry or too wet for it'], [/^Field elevation/, 'the field is too high or too low for it'],
+    [/^Mean slope/, 'the field is too steep for it'], [/^Drought risk/, 'it is risky in a drought without irrigation'],
+  ];
+  function shortReason(t) {
+    const bad = t.reasons.find((x) => !x.ok);
+    if (!bad) return 'Good match for the weather, water and land of this field.';
+    const m = LIMITS.find(([re]) => re.test(bad.text));
+    return `${t.score >= 60 ? 'Good choice, but' : 'Possible, but'} ${m ? m[1] : 'one condition is not ideal'}.`;
+  }
+
   // ── UI ──
   function controlsHtml(id, inp) {
     const seg = ['low', 'medium', 'high'].map((v) => `<button type="button" data-adv="water" data-v="${v}" class="${inp.water === v ? 'on' : ''}">${v[0].toUpperCase() + v.slice(1)}</button>`).join('');
     const chips = rules.crops.map((c) => `<button type="button" class="adv-chip${inp.prefs.includes(c.id) ? ' on' : ''}" data-adv="pref" data-v="${c.id}" aria-pressed="${inp.prefs.includes(c.id)}">${esc(c.name)}</button>`).join('');
     return `
-      <div class="adv-row"><span class="label">Water availability</span><div class="seg" role="group" aria-label="Water availability">${seg}</div></div>
+      <div class="adv-row"><span class="label">Water you have</span><div class="seg" role="group" aria-label="Water availability">${seg}</div></div>
       <label class="toggle adv-irr"><input type="checkbox" data-adv="irrigation" ${inp.irrigation ? 'checked' : ''} /><span class="sw"></span>Irrigation available</label>
       <div class="adv-pref"><span class="label">Crops you prefer <small>(optional)</small></span><div class="adv-chips">${chips}</div></div>`;
   }
@@ -193,13 +232,18 @@
       const r = evaluate(field, inp, a, C.state.risks);
       if (opts.setCrop && r.top[0]) { const c = r.top[0].crop; opts.setCrop(id, { id: c.id, color: c.color, color2: c.color2, height: c.rowHeightM }); }
       const warn = r.warnings.map((w) => `<div class="adv-warn"><span aria-hidden="true">⚠</span><span>${esc(w)}</span></div>`).join('');
+      const wInfo = window.FieldWater ? window.FieldWater.info(id, field) : { status: 'unknown' };
       const cards = r.top.map((t, i) => `
         <div class="adv-crop">
           <div class="adv-crop-head"><span class="adv-rank">${i + 1}</span><span class="adv-swatch" style="background:${t.crop.color}"></span><b>${esc(t.crop.name)}</b>${t.preferred ? '<span class="adv-tag">your pick</span>' : ''}<span class="adv-score">${t.score}<small>/100</small></span></div>
-          <div class="adv-bar"><span style="width:${t.score}%"></span></div>
-          <ul class="adv-reasons">${t.reasons.map((x) => `<li class="${x.ok ? 'ok' : 'no'}">${esc(x.text)}</li>`).join('')}</ul>
-          <p class="adv-plant"><b>Planting:</b> ${esc(t.window.text)}</p>
-          <p class="adv-soil">${esc(t.crop.soilEffect.note)}${t.crop.perennialYears ? ` Stays ${t.crop.perennialYears >= 10 ? 'for decades' : 'about ' + t.crop.perennialYears + ' years'}: not part of a yearly rotation.` : ''}</p>
+          <div class="adv-bar" role="img" aria-label="Match score ${t.score} out of 100"><span style="width:${t.score}%"></span></div>
+          <p class="adv-why">${esc(shortReason(t))}</p>
+          ${waterHtml(t.crop, r.rainYear, field, wInfo)}
+          <details class="adv-more"><summary>More details</summary>
+            <ul class="adv-reasons">${t.reasons.map((x) => `<li class="${x.ok ? 'ok' : 'no'}">${esc(x.text)}</li>`).join('')}</ul>
+            <p class="adv-plant"><b>Planting:</b> ${esc(t.window.text)}</p>
+            <p class="adv-soil">${esc(t.crop.soilEffect.note)}${t.crop.perennialYears ? ` Stays ${t.crop.perennialYears >= 10 ? 'for decades' : 'about ' + t.crop.perennialYears + ' years'}: not part of a yearly rotation.` : ''}</p>
+          </details>
         </div>`).join('');
       const rot = r.rotation;
       const steps = rot.plan.map((p, i) => `<li><span class="adv-year">Year ${i + 1}</span><span class="adv-swatch" style="background:${p.crop.color}"></span><b>${esc(p.crop.name)}</b><span class="adv-n ${p.crop.soilEffect.nitrogen > 0 ? 'plus' : 'minus'}">${p.crop.soilEffect.nitrogen > 0 ? 'adds nitrogen' : 'uses nitrogen'}</span><p>${esc(p.reason)}</p></li>`).join('');
@@ -208,7 +252,7 @@
         : 'No legume scored well enough here: add manure or compost every year to keep the soil fertile.';
       body = `
         ${warn}
-        <div class="adv-sub">Top 3 crops for this field</div>
+        <div class="adv-sub">Best 3 crops for this field ${help('Score from 0 to 100: how well each crop fits this field’s temperature, water, soil moisture, height and slope. Highest first.')}</div>
         ${cards}
         <div class="adv-sub">3-year rotation</div>
         <ol class="adv-rot">${steps}</ol>

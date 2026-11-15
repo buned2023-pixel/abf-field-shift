@@ -422,6 +422,80 @@ app.get('/api/landzones', async (req, res) => {
 // Trees are not fetched at runtime: "npm run build-trees" writes public/data/trees.bin,
 // which is served as a static file.
 
+// GET /tiles/osm/:z/:x/:y.pbf — OpenStreetMap vector tiles (OpenFreeMap, no key) for rivers and lakes.
+// The tile URL contains a dated build name, read from OpenFreeMap's TileJSON (refreshed daily).
+// Tiles are kept on disk in data/tile-cache/osm (safe to delete).
+const OSM_TILEJSON = 'https://tiles.openfreemap.org/planet';
+const OSM_DIR = path.join(__dirname, 'data', 'tile-cache', 'osm');
+let osmTemplate = null, osmTemplateAt = 0;
+async function osmTileUrl(z, x, y) {
+  if (!osmTemplate || Date.now() - osmTemplateAt > 24 * 3600 * 1000) {
+    const tj = JSON.parse((await fetchBuffer(OSM_TILEJSON, 15000)).toString('utf8'));
+    osmTemplate = tj.tiles[0]; osmTemplateAt = Date.now();
+  }
+  return osmTemplate.replace('{z}', z).replace('{x}', x).replace('{y}', y);
+}
+async function getOsmTile(z, x, y) {
+  const file = path.join(OSM_DIR, String(z), String(x), `${y}.pbf`);
+  try { return await fs.promises.readFile(file); } catch (_) { /* not on disk yet */ }
+  const url = await osmTileUrl(z, x, y);
+  const buf = await fetchBuffer(url, 20000).catch((e) => (e.status === 404 ? Promise.reject(e) : fetchBuffer(url, 20000)));
+  fs.promises.mkdir(path.dirname(file), { recursive: true }).then(() => fs.promises.writeFile(file, buf)).catch(() => {});
+  return buf;
+}
+
+// GET /api/water-near?lat=&lon=&r=4000 — rivers, canals, streams and lakes within r metres (max 6 km),
+// read from the same OpenStreetMap tiles (zoom 14, full detail). The browser measures distances with Turf.
+const { VectorTile } = require('@mapbox/vector-tile');
+const Pbf = require('pbf');
+const WATERWAY_CLASSES = ['river', 'canal', 'stream', 'ditch', 'drain'];
+app.get('/api/water-near', async (req, res) => {
+  const lat = parseFloat(req.query.lat), lon = parseFloat(req.query.lon);
+  const r = Math.min(Math.max(parseFloat(req.query.r) || 4000, 500), 6000);
+  if (!Number.isFinite(lat) || !Number.isFinite(lon) || Math.abs(lat) > 85) return res.status(400).json({ error: 'bad_coordinates' });
+  const z = 14, n = 2 ** z;
+  const dLat = r / 110540, dLon = r / (111320 * Math.cos((lat * Math.PI) / 180));
+  const tx = (lo) => Math.floor(((lo + 180) / 360) * n);
+  const ty = (la) => { const a = (la * Math.PI) / 180; return Math.floor(((1 - Math.log(Math.tan(a) + 1 / Math.cos(a)) / Math.PI) / 2) * n); };
+  const tiles = [];
+  for (let x = tx(lon - dLon); x <= tx(lon + dLon); x++) for (let y = ty(lat + dLat); y <= ty(lat - dLat); y++) tiles.push([x, y]);
+  const features = [];
+  let failed = 0;
+  await Promise.all(tiles.map(async ([x, y]) => {
+    let vt;
+    try { vt = new VectorTile(new Pbf(await getOsmTile(z, x, y))); } catch (_) { failed++; return; }
+    const ww = vt.layers.waterway, wa = vt.layers.water;
+    for (let i = 0; ww && i < ww.length; i++) {
+      const f = ww.feature(i);
+      if (!WATERWAY_CLASSES.includes(f.properties.class) || f.properties.brunnel === 'tunnel') continue;
+      const g = f.toGeoJSON(x, y, z);
+      g.properties = { type: f.properties.class, name: f.properties.name || f.properties['name:latin'] || '' };
+      features.push(g);
+    }
+    for (let i = 0; wa && i < wa.length; i++) {
+      const f = wa.feature(i);
+      if (f.properties.class === 'swimming_pool') continue;
+      const g = f.toGeoJSON(x, y, z);
+      g.properties = { type: f.properties.class === 'river' ? 'river' : 'lake', name: '' };
+      features.push(g);
+    }
+  }));
+  if (failed === tiles.length) return res.status(502).json({ error: 'water_data_unavailable' });
+  res.json({ type: 'FeatureCollection', radiusM: r, partial: failed > 0, features });
+});
+
+app.get('/tiles/osm/:z/:x/:y.pbf', async (req, res) => {
+  const z = parseInt(req.params.z, 10), x = parseInt(req.params.x, 10), y = parseInt(req.params.y, 10);
+  if (![z, x, y].every(Number.isInteger) || z < 0 || z > 14 || x < 0 || y < 0 || x >= 2 ** z || y >= 2 ** z) return res.status(400).end();
+  try {
+    const buf = await getOsmTile(z, x, y);
+    res.set({ 'Content-Type': 'application/x-protobuf', 'Cache-Control': 'public, max-age=86400' });
+    res.send(buf);
+  } catch (err) {
+    res.status(err.status === 404 ? 204 : 502).end();
+  }
+});
+
 // GET /tiles/terrarium/:z/:x/:y.png — DEM tile proxy (same-origin for canvas reads, cached)
 function fetchBuffer(url, timeout = 20000) {
   return new Promise((resolve, reject) => {
