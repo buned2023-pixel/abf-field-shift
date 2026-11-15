@@ -55,6 +55,9 @@
     return data;
   }
 
+  // Colour look at intensity 1.0 — change these numbers to retune the map
+  const COLOR_BASE = { saturation: 0.4, contrast: 0.2, tint: 0.3, tintNoImagery: 0.95 };
+
   // ─── Map ───────────────────────────────────────────────────────────────────
   // Contour lines generated in the browser from the same DEM (maplibre-contour)
   let contourUrl = null;
@@ -89,19 +92,53 @@
     },
     layers: [
       { id: 'background', type: 'background', paint: { 'background-color': '#0A1020' } },
-      // Gentle colour boost: vivid but still natural
-      { id: 'satellite', type: 'raster', source: 'satellite', paint: { 'raster-saturation': 0.18, 'raster-contrast': 0.12, 'raster-brightness-min': 0.02 } },
+      // Fuller colours: deeper greens, warmer rock, clean white snow, with a very slight warm tint
+      // (hue shifted a few degrees toward yellow). Scaled by the "Colour intensity" slider.
+      { id: 'satellite', type: 'raster', source: 'satellite', layout: { visibility: 'none' }, paint: { 'raster-saturation': COLOR_BASE.saturation, 'raster-contrast': COLOR_BASE.contrast, 'raster-brightness-min': 0.05, 'raster-brightness-max': 1, 'raster-hue-rotate': -4 } },
       {
-        // MapLibre has no layer blend modes; shadow-only hillshade (transparent highlights)
-        // darkens slopes like a multiply blend. Lit from 250° = west-south-west afternoon sun.
+        // Height tint over the imagery: green valleys → golden-ochre mid slopes → grey-brown rock → snow above ~3500 m
+        id: 'height-tint', type: 'color-relief', source: 'hillshadeDem',
+        paint: {
+          'color-relief-opacity': COLOR_BASE.tintNoImagery, // imagery is off by default: the tint is the ground colour
+          'color-relief-color': ['interpolate', ['linear'], ['elevation'],
+            300, '#5f8f58', 900, '#7a9c62', 1500, '#b9a23c', 2200, '#d09a3a',
+            2800, '#8c7460', 3300, '#9a8b80', 3500, '#f2f4f8', 4500, '#ffffff'],
+        },
+      },
+      {
+        // Hillshade 1 (strong): sun from the north-west for ridge depth.
+        // Warm highlights on lit slopes, cool deep-blue shadows on the far side.
         id: 'hillshade', type: 'hillshade', source: 'hillshadeDem',
         paint: {
-          'hillshade-exaggeration': 0.45,
-          'hillshade-illumination-direction': 250,
+          'hillshade-exaggeration': 0.72,
+          'hillshade-illumination-direction': 315,
           'hillshade-illumination-anchor': 'map',
-          'hillshade-shadow-color': 'rgba(10, 16, 32, 0.6)',
-          'hillshade-highlight-color': 'rgba(255, 244, 214, 0.08)',
-          'hillshade-accent-color': 'rgba(10, 16, 32, 0.25)',
+          'hillshade-shadow-color': 'rgba(8, 18, 82, 0.72)',
+          'hillshade-highlight-color': 'rgba(255, 212, 138, 0.3)',
+          'hillshade-accent-color': 'rgba(8, 18, 82, 0.24)',
+        },
+      },
+      {
+        // Hillshade 2 (soft): fill light from the south-west so shadowed slopes keep some shape
+        id: 'hillshade-soft', type: 'hillshade', source: 'hillshadeDem',
+        paint: {
+          'hillshade-exaggeration': 0.3,
+          'hillshade-illumination-direction': 200,
+          'hillshade-illumination-anchor': 'map',
+          'hillshade-shadow-color': 'rgba(20, 30, 80, 0.3)',
+          'hillshade-highlight-color': 'rgba(255, 240, 210, 0.1)',
+          'hillshade-accent-color': 'rgba(0, 0, 0, 0)',
+        },
+      },
+      {
+        // Slope shading (toggle): only the "accent" term is used, which MapLibre scales by
+        // steepness, not by sun direction. Steep slopes get a darker tint; flat land is untouched.
+        id: 'slope-shade', type: 'hillshade', source: 'hillshadeDem',
+        paint: {
+          'hillshade-exaggeration': 1,
+          'hillshade-shadow-color': 'rgba(0, 0, 0, 0)',
+          'hillshade-highlight-color': 'rgba(0, 0, 0, 0)',
+          'hillshade-accent-color': 'rgba(8, 14, 40, 0.5)',
         },
       },
       ...(contourUrl ? [
@@ -144,18 +181,19 @@
       { id: 'blocked-fill', type: 'fill', source: 'blockedParts', paint: { 'fill-color': BLOCK_COLOR, 'fill-opacity': 0.55 } },
       { id: 'blocked-line', type: 'line', source: 'blockedParts', paint: { 'line-color': '#ffffff', 'line-width': 1.5, 'line-dasharray': [2, 1.5] } },
     ],
-    terrain: { source: 'terrainDem', exaggeration: 1.4 },
+    terrain: { source: 'terrainDem', exaggeration: 1.5 },
     sky: {
-      // Afternoon gradient: deep blue overhead → pale haze at the horizon; fog fades distant terrain
-      'sky-color': '#1d3f9e',
-      'horizon-color': '#bcd2f0',
-      'fog-color': '#c5d3e6',
-      'sky-horizon-blend': 0.75,
-      'horizon-fog-blend': 0.55,
-      'fog-ground-blend': 0.72,
+      // Afternoon gradient: deep blue overhead → warm pale haze at the horizon; fog fades distant terrain
+      'sky-color': '#1b3fa8',
+      'horizon-color': '#c9d8ee',
+      'fog-color': '#cdd6e2',
+      'sky-horizon-blend': 0.8,
+      'horizon-fog-blend': 0.6,
+      'fog-ground-blend': 0.68,
       'atmosphere-blend': ['interpolate', ['linear'], ['zoom'], 0, 1, 10, 1, 12, 0],
     },
-    light: { anchor: 'map', position: [1.15, 250, 35], color: '#fff4dc', intensity: 0.45 },
+    // Low afternoon sun from the west-south-west (lights 3D objects such as trees and crop rows)
+    light: { anchor: 'map', position: [1.15, 250, 68], color: '#ffe9c4', intensity: 0.5 },
   };
 
   const map = new maplibregl.Map({
@@ -188,7 +226,7 @@
   map.on('error', (e) => { if (e && e.error) console.warn('[map]', e.error.message); });
 
   // ─── View controls (2D/3D, exaggeration, layers) ──────────────────────────
-  const view = { is3D: true, exaggeration: 1.4 };
+  const view = { is3D: true, exaggeration: 1.5 };
 
   function set3D(on) {
     view.is3D = on;
@@ -221,8 +259,23 @@
       $('exagValue').textContent = `${view.exaggeration.toFixed(1)}×`;
       if (view.is3D) map.setTerrain({ source: 'terrainDem', exaggeration: view.exaggeration });
     });
-    $('lyrSatellite').addEventListener('change', (e) => setLayerVisible('satellite', e.target.checked));
-    $('lyrHillshade').addEventListener('change', (e) => setLayerVisible('hillshade', e.target.checked));
+    $('lyrSatellite').addEventListener('change', (e) => {
+      setLayerVisible('satellite', e.target.checked);
+      // Without imagery the height tint becomes the ground colour; with imagery it is a light overlay
+      const k = parseFloat($('colorIntensity').value) || 1;
+      map.setPaintProperty('height-tint', 'color-relief-opacity', e.target.checked ? Math.min(0.5, COLOR_BASE.tint * k) : COLOR_BASE.tintNoImagery);
+    });
+    $('lyrHillshade').addEventListener('change', (e) => { setLayerVisible('hillshade', e.target.checked); setLayerVisible('hillshade-soft', e.target.checked); });
+    $('lyrSlope').addEventListener('change', (e) => setLayerVisible('slope-shade', e.target.checked));
+    $('lyrRelief').addEventListener('change', (e) => setLayerVisible('height-tint', e.target.checked));
+    // Colour intensity 0.5–1.5: scales imagery saturation and contrast, and the height tint
+    $('colorIntensity').addEventListener('input', (e) => {
+      const k = parseFloat(e.target.value);
+      $('colorValue').textContent = `${k.toFixed(1)}×`;
+      map.setPaintProperty('satellite', 'raster-saturation', Math.min(0.9, COLOR_BASE.saturation * k));
+      map.setPaintProperty('satellite', 'raster-contrast', Math.min(0.6, COLOR_BASE.contrast * k));
+      if ($('lyrSatellite').checked) map.setPaintProperty('height-tint', 'color-relief-opacity', Math.min(0.5, COLOR_BASE.tint * k));
+    });
     $('lyrLabels').addEventListener('change', (e) => setLayerVisible('labels', e.target.checked));
     $('lyrFields').addEventListener('change', (e) => setFieldsVisible(e.target.checked));
     $('lyrContours').addEventListener('change', (e) => { setLayerVisible('contours', e.target.checked); setLayerVisible('contour-labels', e.target.checked); });
@@ -695,14 +748,15 @@
     if (!field || !field.geo) return;
     let m = labels.get(id);
     if (!m) {
-      const el = document.createElement('div');
-      el.className = 'field-label';
-      m = new maplibregl.Marker({ element: el, anchor: 'center' }).setLngLat(field.geo.centroid).addTo(map);
+      // Labeled pin: glowing dot on the field, thin stem, card with name + area
+      const el = window.FSStyles.createPin({ kind: 'field' });
+      // opacityWhenCovered: MapLibre misjudges pins sitting on the terrain surface as hidden and fades them
+      m = new maplibregl.Marker({ element: el, anchor: 'bottom', offset: [0, 5], opacityWhenCovered: '1' }).setLngLat(field.geo.centroid).addTo(map);
       if (!$('lyrFields').checked) el.style.display = 'none';
       labels.set(id, m);
     }
     m.setLngLat(field.geo.centroid);
-    m.getElement().textContent = field.name;
+    window.FSStyles.updatePin(m.getElement(), { title: field.name, sub: `${fmt(field.geo.areaHa, field.geo.areaHa < 10 ? 2 : 1)} ha` });
   }
 
   // ── No-draw zones + live feedback while drawing ──
@@ -815,6 +869,8 @@
   function updateGlow(gj) {
     const src = map.getSource('fieldGlow');
     if (src) src.setData(gj || toGeoJSON(true));
+    if (window.FieldPlants) window.FieldPlants.fieldsChanged(); // crop rows follow the fields
+    if (window.FieldTrees) window.FieldTrees.fieldsChanged();   // trees stay out of the fields
   }
 
   // Normalise any GeoJSON into Terra Draw-ready polygons
@@ -1041,6 +1097,8 @@
     el.innerHTML = `
       <div class="detail-head"><span class="swatch"></span><input class="name-input" id="nameInput" value="${esc(field.name)}" maxlength="60" aria-label="Field name" /></div>
       <div class="metrics">
+        ${window.FieldClimate ? window.FieldClimate.badgesHtml(selectedId) : ''}
+        ${window.FieldAdvisor ? window.FieldAdvisor.html(selectedId, field) : ''}
         ${landHtml(selectedId, field)}
         ${metric('Area', `${fmt(g.areaHa, g.areaHa < 10 ? 2 : 1)}<small>ha</small>`, `${fmt(g.areaHa * 2.47105, 1)} acres`)}
         ${metric('Perimeter', `${fmt(g.perimeterKm < 1 ? g.perimeterKm * 1000 : g.perimeterKm, g.perimeterKm < 1 ? 0 : 2)}<small>${g.perimeterKm < 1 ? 'm' : 'km'}</small>`)}
@@ -1100,6 +1158,11 @@
   }
 
   function render() {
+    // Stage 2: NASA data, timeline and risk badges follow the selected field
+    if (window.FieldClimate) {
+      const sel = selectedId && fields.get(selectedId);
+      window.FieldClimate.setField(sel && sel.geo ? { id: selectedId, name: sel.name, centroid: sel.geo.centroid } : null);
+    }
     renderDetail();
     renderList();
     $('deleteBtn').disabled = !selectedId;
@@ -1155,6 +1218,28 @@
   // which can take many seconds on slow connections. Drawing only needs the style.
   map.once('style.load', () => {
     addHatch();
+    // Slow lime pulse on field outlines (off when there are no fields, or with reduced motion)
+    window.FSStyles.pulse(map, 'field-glow', { active: () => fields.size > 0 && $('lyrFields').checked });
+    // 3D trees and crop rows (added before Terra Draw so field outlines stay on top)
+    const plantOptions = {
+      mobile: MOBILE,
+      // field.crop ({ color, color2, height }) is reserved for the crop advisor in a later stage
+      getFields: () => [...fields.entries()].map(([id, f]) => ({ id, feature: featureOf(id), terrain: f.terrain, crop: f.crop })),
+    };
+    window.FieldPlants.init(map, plantOptions);
+    window.FieldTrees.init(map, plantOptions);
+    window.FieldClimate.init(map, { rerender: () => render() }); // Stage 2: fire layer, timeline, risk badges
+    // Stage 3: crop advisor. Its top crop sets the colour and height of the field's 3D crop rows.
+    window.FieldAdvisor.init({
+      rerender: () => render(),
+      getSelectedId: () => selectedId,
+      setCrop: (id, crop) => {
+        const f = fields.get(id);
+        if (!f || (f.crop && f.crop.id === crop.id)) return;
+        f.crop = crop;
+        if (window.FieldPlants) window.FieldPlants.fieldsChanged();
+      },
+    });
     setupDraw();
     loadSaved();
     updateGlow();

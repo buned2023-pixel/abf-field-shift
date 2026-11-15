@@ -203,7 +203,7 @@ app.get('/api/firms', async (req, res) => {
     const lat = parseFloat(req.query.lat);
     const lon = parseFloat(req.query.lon);
     const range = Math.min(parseFloat(req.query.range) || 1.5, 5);
-    const days = Math.min(Math.max(parseInt(req.query.days, 10) || 3, 1), 5);
+    const days = Math.min(Math.max(parseInt(req.query.days, 10) || 3, 1), 10); // FIRMS allows up to 10 days
 
     if (isNaN(lat) || isNaN(lon)) {
       return res.status(400).json({ error: 'lat and lon are required numeric query parameters' });
@@ -211,14 +211,26 @@ app.get('/api/firms', async (req, res) => {
 
     const area = [lon - range, lat - range, lon + range, lat + range].map((v) => round(v, 3)).join(',');
     const result = await cached(`firms:${area}:${days}`, CACHE_TTL, async () => {
-      // VIIRS: Suomi-NPP stopped publishing NRT data in Nov 2026, so use NOAA-20 + NOAA-21.
-      const firmsUrl = (source) => `https://firms.modaps.eosdis.nasa.gov/api/area/csv/${FIRMS_MAP_KEY}/${source}/${area}/${days}`;
-      const [noaa20Raw, noaa21Raw, modisRaw] = await Promise.all([
-        fetchUrl(firmsUrl('VIIRS_NOAA20_NRT')).catch(() => ''),
-        fetchUrl(firmsUrl('VIIRS_NOAA21_NRT')).catch(() => ''),
-        fetchUrl(firmsUrl('MODIS_NRT')).catch(() => ''),
+      // VIIRS: Suomi-NPP (VIIRS_SNPP_NRT) is queried as specified, but it stopped publishing
+      // NRT data on 2026-11-02, so NOAA-20 and NOAA-21 (the same VIIRS instrument) are included too.
+      // FIRMS accepts at most 5 days per request ("Invalid day range. Expects [1..5]"), so a longer
+      // period is fetched as consecutive windows, each with its own start date, and merged.
+      const windows = [];
+      const start = new Date(Date.now() - (days - 1) * 86400000);
+      for (let offset = 0; offset < days; offset += 5) {
+        const from = new Date(start.getTime() + offset * 86400000).toISOString().slice(0, 10);
+        windows.push({ from, span: Math.min(5, days - offset) });
+      }
+      const fetchSource = async (source) => {
+        const parts = await Promise.all(windows.map((w) =>
+          fetchUrl(`https://firms.modaps.eosdis.nasa.gov/api/area/csv/${FIRMS_MAP_KEY}/${source}/${area}/${w.span}/${w.from}`)
+            .then(parseCsv).catch(() => [])));
+        return parts.flat();
+      };
+      const [snpp, noaa20, noaa21, modis] = await Promise.all([
+        fetchSource('VIIRS_SNPP_NRT'), fetchSource('VIIRS_NOAA20_NRT'), fetchSource('VIIRS_NOAA21_NRT'), fetchSource('MODIS_NRT'),
       ]);
-      const slim = (r, sensor) => ({
+      const slim = (r, sensor, satellite) => ({
         lat: parseFloat(r.latitude),
         lon: parseFloat(r.longitude),
         date: r.acq_date,
@@ -226,10 +238,15 @@ app.get('/api/firms', async (req, res) => {
         confidence: r.confidence,
         frp: parseFloat(r.frp) || 0,
         sensor,
+        satellite,
       });
       return {
-        viirs: [...parseCsv(noaa20Raw), ...parseCsv(noaa21Raw)].map((r) => slim(r, 'VIIRS')),
-        modis: parseCsv(modisRaw).map((r) => slim(r, 'MODIS')),
+        viirs: [
+          ...snpp.map((r) => slim(r, 'VIIRS', 'Suomi-NPP')),
+          ...noaa20.map((r) => slim(r, 'VIIRS', 'NOAA-20')),
+          ...noaa21.map((r) => slim(r, 'VIIRS', 'NOAA-21')),
+        ],
+        modis: modis.map((r) => slim(r, 'MODIS', r.satellite || 'Terra/Aqua')),
       };
     });
     res.json({ ...result, days, range });
@@ -248,16 +265,55 @@ app.get('/api/power', async (req, res) => {
       return res.status(400).json({ error: 'lat and lon are required numeric query parameters' });
     }
 
-    const result = await cached(`power:${lat},${lon}`, CACHE_TTL, async () => {
-      const currentYear = new Date().getFullYear();
-      // The most recent year can lag on POWER; step back a year if it isn't published yet.
-      for (let endYear = currentYear - 1; endYear >= currentYear - 2; endYear--) {
-        const startYear = endYear - 19;
-        const url = `https://power.larc.nasa.gov/api/temporal/monthly/point?parameters=PRECTOTCORR,T2M,GWETROOT&community=AG&longitude=${lon}&latitude=${lat}&start=${startYear}&end=${endYear}&format=JSON`;
-        let data;
-        try { data = JSON.parse(await fetchUrl(url, 45000)); } catch (_) { continue; }
+    let result;
+    try {
+      result = await cached(`power:${lat},${lon}`, CACHE_TTL, () => fetchPower(lat, lon)); // errors are never cached
+      savePowerFile(result);
+    } catch (err) {
+      // Live NASA POWER failed: fall back to the last saved answer for this point (or one close by)
+      const saved = readPowerFile(lat, lon);
+      if (!saved) {
+        console.warn(`[power] ${lat},${lon}: live request failed (${err.message}) and no saved copy exists`);
+        return res.status(502).json({ error: 'power_unavailable', reason: err.message });
+      }
+      console.warn(`[power] ${lat},${lon}: live request failed (${err.message}); serving saved copy from ${saved.savedAt}`);
+      result = { ...saved, stale: true };
+    }
+    res.json(result);
+  } catch (err) {
+    res.status(502).json({ error: 'power_unavailable' });
+  }
+});
+
+// NASA POWER: 30 s timeout per request, one retry. Asks for the last 20 full years plus the current
+// (partial) year; if the current year isn't published yet, it steps back one year (no retry then).
+const POWER_TIMEOUT_MS = 30000;
+async function fetchPower(lat, lon) {
+  const currentYear = new Date().getFullYear();
+  const errors = [];
+  for (const endYear of [currentYear, currentYear - 1]) {
+    const startYear = Math.min(endYear, currentYear - 1) - 19;
+    const url = `https://power.larc.nasa.gov/api/temporal/monthly/point?parameters=PRECTOTCORR,T2M,T2M_MAX,GWETROOT,ALLSKY_SFC_SW_DWN&community=AG&longitude=${lon}&latitude=${lat}&start=${startYear}&end=${endYear}&format=JSON`;
+    const tries = endYear === currentYear ? 2 : 1;
+    for (let t = 1; t <= tries; t++) {
+      try {
+        const data = JSON.parse((await fetchBuffer(url, POWER_TIMEOUT_MS)).toString('utf8'));
+        const parsed = parsePower(data, startYear, endYear, currentYear, lat, lon);
+        if (parsed) return parsed;
+        errors.push(`end ${endYear}: no data in answer`);
+        break; // a valid answer without data won't change on retry: step back a year
+      } catch (err) {
+        errors.push(`end ${endYear} try ${t}: ${err.status ? 'HTTP ' + err.status : err.message}`);
+        if (err.status && err.status < 500) break; // e.g. 422 "year not available yet": step back, no retry
+      }
+    }
+  }
+  throw new Error(errors.join('; '));
+}
+
+function parsePower(data, startYear, endYear, currentYear, lat, lon) {
         const p = data.properties && data.properties.parameter;
-        if (!p || !p.T2M) continue;
+        if (!p || !p.T2M) return null;
 
         const fill = (data.header && data.header.fill_value) != null ? data.header.fill_value : -999;
         const months = [];
@@ -272,17 +328,56 @@ app.get('/api/power', async (req, res) => {
               year: y, month: m,
               precip: val('PRECTOTCORR'), // mm/day
               temp: val('T2M'),           // °C
+              tmax: val('T2M_MAX'),       // °C, monthly maximum
               soil: val('GWETROOT'),      // 0..1
+              sun: val('ALLSKY_SFC_SW_DWN'), // solar radiation at the surface
             });
           }
         }
-        return { startYear, endYear, lat, lon, months };
-      }
-      throw new Error('power_unavailable');
-    });
-    res.json(result);
+        // lastFullYear: the 20-year baseline ends here; a later year in the data is the partial current year
+        return { startYear, endYear, lastFullYear: Math.min(endYear, currentYear - 1), lat, lon, months };
+}
+
+// Saved copies of successful POWER answers (data/power-cache), used when the live API fails.
+// Monthly climate history barely changes, so an old copy is still useful for a demo.
+const POWER_DIR = path.join(__dirname, 'data', 'power-cache');
+const powerFile = (lat, lon) => path.join(POWER_DIR, `${lat.toFixed(2)}_${lon.toFixed(2)}.json`);
+function savePowerFile(result) {
+  try {
+    fs.mkdirSync(POWER_DIR, { recursive: true });
+    fs.writeFileSync(powerFile(result.lat, result.lon), JSON.stringify({ ...result, savedAt: new Date().toISOString() }));
+  } catch (err) { console.warn('[power] could not save copy:', err.message); }
+}
+function readPowerFile(lat, lon) {
+  try { return JSON.parse(fs.readFileSync(powerFile(lat, lon), 'utf8')); } catch (_) { /* try a nearby point */ }
+  // POWER cells are 0.5° x 0.625°, so a saved point within 0.25° has practically the same data
+  let best = null, bestD = 0.25;
+  try {
+    for (const f of fs.readdirSync(POWER_DIR)) {
+      const m = f.match(/^(-?[\d.]+)_(-?[\d.]+)\.json$/);
+      if (!m) continue;
+      const d = Math.hypot(+m[1] - lat, +m[2] - lon);
+      if (d <= bestD) { bestD = d; best = f; }
+    }
+    return best ? JSON.parse(fs.readFileSync(path.join(POWER_DIR, best), 'utf8')) : null;
+  } catch (_) { return null; }
+}
+
+// GET /api/risk-rules — scoring rules for the drought / heat / fire badges (config/risk-rules.json)
+app.get('/api/risk-rules', (req, res) => {
+  try {
+    res.json(JSON.parse(fs.readFileSync(path.join(__dirname, 'config', 'risk-rules.json'), 'utf-8')));
   } catch (err) {
-    res.status(502).json({ error: 'power_unavailable' });
+    res.status(500).json({ error: 'risk_rules_unavailable' });
+  }
+});
+
+// GET /api/crop-rules — crop advisor rules (config/crops.json)
+app.get('/api/crop-rules', (req, res) => {
+  try {
+    res.json(JSON.parse(fs.readFileSync(path.join(__dirname, 'config', 'crops.json'), 'utf-8')));
+  } catch (err) {
+    res.status(500).json({ error: 'crop_rules_unavailable' });
   }
 });
 
@@ -324,6 +419,9 @@ app.get('/api/landzones', async (req, res) => {
   res.json(result.status === 'ok' ? { status: 'ok', blocked: result.blocked } : result);
 });
 
+// Trees are not fetched at runtime: "npm run build-trees" writes public/data/trees.bin,
+// which is served as a static file.
+
 // GET /tiles/terrarium/:z/:x/:y.png — DEM tile proxy (same-origin for canvas reads, cached)
 function fetchBuffer(url, timeout = 20000) {
   return new Promise((resolve, reject) => {
@@ -342,6 +440,31 @@ const tileCache = new Map();
 const tileInflight = new Map();
 const TILE_CACHE_MAX_BYTES = 120 * 1024 * 1024; // z15 tiles are up to ~110 KB, so cap by size
 let tileCacheBytes = 0;
+
+// Disk cache for terrain tiles. Elevation never changes, so each tile is downloaded from AWS
+// once and then served from data/tile-cache (survives restarts, hides a slow AWS connection).
+// The folder is safe to delete at any time; writing stops once it reaches the size limit.
+const TILE_DISK_DIR = path.join(__dirname, 'data', 'tile-cache', 'terrarium');
+const TILE_DISK_MAX_BYTES = 600 * 1024 * 1024;
+let tileDiskBytes = 0;
+(function measureTileDisk(dir) {
+  try {
+    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+      const p = path.join(dir, e.name);
+      if (e.isDirectory()) measureTileDisk(p); else tileDiskBytes += fs.statSync(p).size;
+    }
+  } catch (_) { /* folder not created yet */ }
+})(TILE_DISK_DIR);
+const tileDiskPath = (key) => path.join(TILE_DISK_DIR, `${key}.png`);
+const readDiskTile = (key) => fs.promises.readFile(tileDiskPath(key));
+function writeDiskTile(key, buf) {
+  if (tileDiskBytes + buf.length > TILE_DISK_MAX_BYTES) return;
+  const file = tileDiskPath(key);
+  fs.promises.mkdir(path.dirname(file), { recursive: true })
+    .then(() => fs.promises.writeFile(file, buf))
+    .then(() => { tileDiskBytes += buf.length; })
+    .catch(() => { /* disk cache is best-effort */ });
+}
 app.get('/tiles/terrarium/:z/:x/:y.png', async (req, res) => {
   const z = parseInt(req.params.z, 10), x = parseInt(req.params.x, 10), y = parseInt(req.params.y, 10);
   if (![z, x, y].every(Number.isInteger) || z < 0 || z > 15 || x < 0 || y < 0 || x >= 2 ** z || y >= 2 ** z) {
@@ -354,8 +477,10 @@ app.get('/tiles/terrarium/:z/:x/:y.png', async (req, res) => {
       // One upstream fetch per tile even when many requests arrive at once; retry once on failure
       if (!tileInflight.has(key)) {
         const url = `https://s3.amazonaws.com/elevation-tiles-prod/terrarium/${key}.png`;
-        const p = fetchBuffer(url, 15000)
-          .catch((e) => (e.status === 404 ? Promise.reject(e) : fetchBuffer(url, 20000)))
+        const p = readDiskTile(key)
+          .catch(() => fetchBuffer(url, 15000)
+            .catch((e) => (e.status === 404 ? Promise.reject(e) : fetchBuffer(url, 20000)))
+            .then((buf) => { writeDiskTile(key, buf); return buf; }))
           .finally(() => tileInflight.delete(key));
         tileInflight.set(key, p);
       }
@@ -371,7 +496,7 @@ app.get('/tiles/terrarium/:z/:x/:y.png', async (req, res) => {
       tileCache.set(key, hit);
       tileCacheBytes += buf.length;
     }
-    res.set({ 'Content-Type': 'image/png', 'Cache-Control': 'public, max-age=600' });
+    res.set({ 'Content-Type': 'image/png', 'Cache-Control': 'public, max-age=86400' });
     res.send(hit.buf);
   } catch (err) {
     res.status(err.status === 404 ? 404 : 502).end();

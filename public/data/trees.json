@@ -1,0 +1,33 @@
+{
+  "builtAt": "2026-11-14T05:53:24.588Z",
+  "count": 127456,
+  "bbox": [
+    68.4,
+    38.4,
+    69.15,
+    38.95
+  ],
+  "complete": true,
+  "chunks": {
+    "total": 25,
+    "vegetationLoaded": 25,
+    "waitingForRoadsWaterBuildings": 0,
+    "failedRequests": 0,
+    "notReached": 0
+  },
+  "byType": {
+    "poplar": 33464,
+    "juniper": 2218,
+    "pine": 1647,
+    "broadleaf": 90127
+  },
+  "byLandClass": {
+    "scrub": 168,
+    "wood": 92789,
+    "tree_row": 1521,
+    "orchard": 19191,
+    "forest": 13172,
+    "vineyard": 615
+  },
+  "source": "OpenStreetMap contributors (ODbL), via Overpass"
+}

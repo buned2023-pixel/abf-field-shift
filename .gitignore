@@ -1,3 +1,5 @@
 .env
 .env.txt
 node_modules/
+data/tile-cache/
+data/trees-cache/

@@ -12,6 +12,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.css" />
   <link rel="stylesheet" href="map.css" />
+  <link rel="stylesheet" href="climate.css" />
 </head>
 <body>
   <div id="map" role="application" aria-label="3D terrain map"></div>
@@ -69,16 +70,35 @@
       </div>
       <label class="row slider-row" for="exaggeration">
         <span class="label">Terrain exaggeration</span>
-        <span class="mono" id="exagValue">1.4×</span>
-        <input type="range" id="exaggeration" min="1" max="3" step="0.1" value="1.4" />
+        <span class="mono" id="exagValue">1.5×</span>
+        <input type="range" id="exaggeration" min="1" max="3" step="0.1" value="1.5" />
+      </label>
+      <label class="row slider-row" for="colorIntensity">
+        <span class="label">Color intensity</span>
+        <span class="mono" id="colorValue">1.0×</span>
+        <input type="range" id="colorIntensity" min="0.5" max="1.5" step="0.1" value="1" />
       </label>
       <div class="divider"></div>
-      <label class="toggle"><input type="checkbox" id="lyrSatellite" checked /><span class="sw"></span>Satellite imagery <small>Esri</small></label>
-      <label class="toggle"><input type="checkbox" id="lyrHillshade" checked /><span class="sw"></span>Hillshade <small>DEM</small></label>
+      <label class="toggle"><input type="checkbox" id="lyrSatellite" /><span class="sw"></span>Satellite imagery <small>Esri</small></label>
+      <label class="toggle"><input type="checkbox" id="lyrHillshade" checked /><span class="sw"></span>Hillshade <small>2 lights</small></label>
+      <label class="toggle" title="Darkens steep slopes so mountains look carved"><input type="checkbox" id="lyrSlope" checked /><span class="sw"></span>Slope shading <small>steep = darker</small></label>
+      <label class="toggle" title="Green valleys, ochre slopes, grey rock, snow above 3500 m"><input type="checkbox" id="lyrRelief" checked /><span class="sw"></span>Height tint <small>by elevation</small></label>
       <label class="toggle"><input type="checkbox" id="lyrContours" /><span class="sw"></span>Contour lines <small>100 m</small></label>
       <label class="toggle"><input type="checkbox" id="lyrLabels" checked /><span class="sw"></span>Place names</label>
       <label class="toggle"><input type="checkbox" id="lyrFields" checked /><span class="sw"></span>My fields</label>
       <label class="toggle" title="Water, villages, roads and buildings from OpenStreetMap. Always shown while drawing."><input type="checkbox" id="lyrZones" /><span class="sw"></span>No-draw zones <small>zoom 12+</small></label>
+      <label class="toggle" title="NASA FIRMS fire detections of the last 10 days around the selected field"><input type="checkbox" id="lyrFires" checked /><span class="sw"></span>Fire hot spots <small><i class="dot" style="background:#ff5a1f"></i>VIIRS <i class="dot" style="background:#ffd43b"></i>MODIS</small></label>
+      <div class="divider"></div>
+      <label class="toggle" title="Poplar, juniper, pine and broadleaf trees from OpenStreetMap, placed on the terrain"><input type="checkbox" id="lyrTrees" checked /><span class="sw"></span>Trees <small>zoom 8+</small></label>
+      <div class="row">
+        <span class="label">Tree quality</span>
+        <div class="seg" id="plantQuality" role="group" aria-label="Plant quality">
+          <button type="button" data-q="low">Low</button>
+          <button type="button" data-q="medium">Med</button>
+          <button type="button" data-q="high">High</button>
+        </div>
+      </div>
+      <p class="plant-status" id="plantStatus" aria-live="polite"></p>
       <p class="about-note">Powered by NASA data · Space Apps Challenge 2026</p>
     </div>
   </aside>
@@ -123,6 +143,23 @@
     <input type="file" id="importFile" accept=".geojson,.json,application/geo+json,application/json" hidden />
   </nav>
 
+  <!-- Climate timeline (Stage 2): shown when a field is selected -->
+  <section class="timeline" id="timeline" aria-label="Climate timeline" hidden>
+    <header class="tl-head">
+      <span class="tl-title">Climate timeline · <b id="tlField"></b> <small>NASA POWER, 20 years, at the field centre</small> <em class="tl-stale" id="tlStale" hidden></em></span>
+      <span class="tl-legend" aria-hidden="true"><i class="lg-line"></i>yearly <i class="lg-dash"></i>trend <i class="lg-dots"></i>20-yr average <i class="lg-now"></i>this year</span>
+      <button type="button" class="tl-toggle" id="tlToggle" aria-expanded="true" title="Show or hide the timeline">
+        <svg class="chev" viewBox="0 0 24 24" width="16" height="16"><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2"/></svg>
+      </button>
+    </header>
+    <div class="tl-body">
+      <div class="wx-card" id="wxCard"></div>
+      <div class="tl-chart"><div class="tl-chart-head"><span><b>Rainfall</b> <small>mm / year</small></span><span class="tl-trend-slot"></span></div><p class="tl-stat"></p><div class="tl-canvas"><canvas id="tlRain"></canvas><p class="tl-msg"></p></div></div>
+      <div class="tl-chart"><div class="tl-chart-head"><span><b>Temperature</b> <small>°C, yearly mean</small></span><span class="tl-trend-slot"></span></div><p class="tl-stat"></p><div class="tl-canvas"><canvas id="tlTemp"></canvas><p class="tl-msg"></p></div></div>
+      <div class="tl-chart"><div class="tl-chart-head"><span><b>Root soil moisture</b> <small>0 dry – 1 saturated</small></span><span class="tl-trend-slot"></span></div><p class="tl-stat"></p><div class="tl-canvas"><canvas id="tlSoil"></canvas><p class="tl-msg"></p></div></div>
+    </div>
+  </section>
+
   <div class="hint" id="hint" hidden></div>
   <div class="cursor-tip" id="cursorTip" hidden></div>
   <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
@@ -132,9 +169,15 @@
   <script src="https://cdn.jsdelivr.net/npm/terra-draw-maplibre-gl-adapter@1.5.0/dist/terra-draw-maplibre-gl-adapter.umd.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@turf/turf@7.2.0/turf.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/maplibre-contour@0.1.0/dist/index.min.js"></script>
+  <script src="styles.js"></script>
   <script src="dem.js"></script>
   <script src="dialog.js"></script>
   <script src="landcheck.js"></script>
+  <script src="plants.js"></script>
+  <script src="trees.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script src="climate.js"></script>
+  <script src="advisor.js"></script>
   <script src="map.js"></script>
 </body>
 </html>

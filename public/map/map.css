@@ -47,6 +47,8 @@ button { font: inherit; color: inherit; }
 .brand-mark { height: 36px; width: 36px; display: block; flex-shrink: 0; }
 .abf-word { font: 700 18px/1 'Space Grotesk', 'Inter', sans-serif; letter-spacing: 0.1em; color: #F4F6FA; }
 .abf-tag { font: 500 10px/1 'Space Grotesk', 'Inter', sans-serif; letter-spacing: 0.3em; text-transform: uppercase; color: #D4F20C; }
+.plant-status { margin: 2px 0 0; font-size: 11px; color: var(--muted); min-height: 1.3em; }
+#plantQuality button { padding: 5px 10px; }
 .about-note { margin: 10px 0 0; padding-top: 10px; border-top: 1px solid var(--border); font-size: 11px; color: var(--muted); }
 
 /* Loading screen */
@@ -233,6 +235,19 @@ button { font: inherit; color: inherit; }
 .toast.error { border-color: rgba(255,95,109,0.6); }
 
 /* Field name labels on the map */
+/* Labeled pins: glowing dot + thin stem + card. Kinds: field (lime), fire, heat, drought. */
+.pin { --pin: #D4F20C; display: flex; flex-direction: column; align-items: center; pointer-events: none; }
+.pin-fire { --pin: #ff5a1f; }
+.pin-heat { --pin: #ff3b4f; }
+.pin-drought { --pin: #ff9f1c; }
+.pin-card { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; padding: 4px 9px; border-radius: 8px; background: rgba(10, 16, 32, 0.86); border: 1px solid color-mix(in srgb, var(--pin) 70%, transparent); box-shadow: 0 0 12px color-mix(in srgb, var(--pin) 35%, transparent); white-space: nowrap; }
+.pin-title { font: 600 12px 'Inter', sans-serif; color: #F4F6FA; }
+.pin-sub { font: 500 10.5px 'JetBrains Mono', ui-monospace, monospace; color: var(--pin); }
+.pin-stem { width: 1px; height: 26px; background: linear-gradient(to bottom, var(--pin), color-mix(in srgb, var(--pin) 40%, transparent)); }
+.pin-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--pin); border: 2px solid #fff; box-shadow: 0 0 0 4px color-mix(in srgb, var(--pin) 30%, transparent), 0 0 14px var(--pin); }
+.pin-fire .pin-dot { animation: pin-flicker 1.6s ease-in-out infinite; }
+@keyframes pin-flicker { 50% { box-shadow: 0 0 0 7px color-mix(in srgb, var(--pin) 22%, transparent), 0 0 22px var(--pin); } }
+@media (prefers-reduced-motion: reduce) { .pin-fire .pin-dot { animation: none; } }
 .field-label {
   font: 600 12px 'Inter', sans-serif; color: #fff; padding: 2px 8px; border-radius: 999px;
   background: rgba(10,15,32,0.75); border: 1px solid rgba(212,242,12,0.7); white-space: nowrap; pointer-events: none; box-shadow: 0 0 10px rgba(212,242,12,0.35);

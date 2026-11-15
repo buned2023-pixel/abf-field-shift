@@ -1,0 +1,63 @@
+{
+  "_about": "Scoring rules for the DROUGHT, HEAT and FIRE badges. Each rule adds points; the total decides the level. Edit numbers here, no code change needed. Reload the page to apply.",
+
+  "trend": {
+    "_about": "Linear regression over the 20 full years. A trend counts as increasing/decreasing only if the change per decade is at least the 'stable' limit below; 'significant' means the slope passes a t-test.",
+    "stableLimit": { "rainPctPerDecade": 5, "soilPctPerDecade": 3, "tempDegPerDecade": 0.15 },
+    "significance": { "minAbsT": 1.73, "label": "90% confidence (t-test on the slope, 20 years)" }
+  },
+
+  "currentYear": {
+    "_about": "The current year is partial, so it is compared with the 20-year average of the same months.",
+    "minMonths": 3
+  },
+
+  "levels": {
+    "_about": "Total points needed for each level (below 'medium' is low).",
+    "medium": 2,
+    "high": 4
+  },
+
+  "drought": {
+    "rainTrendDecreasing": { "points": 1, "pointsIfSignificant": 2 },
+    "soilBelowNormPct": [
+      { "atLeast": 10, "points": 1 },
+      { "atLeast": 20, "points": 2 }
+    ],
+    "rainBelowNormPct": [
+      { "atLeast": 15, "points": 1 },
+      { "atLeast": 30, "points": 2 }
+    ]
+  },
+
+  "heat": {
+    "_about": "A month is 'hot' when its T2M_MAX is at least hotMonthMarginC above the 20-year average for that calendar month. Counted over the last 12 months with data.",
+    "hotMonthMarginC": 1.0,
+    "hotMonthsLast12": [
+      { "atLeast": 3, "points": 1 },
+      { "atLeast": 6, "points": 2 }
+    ],
+    "tmaxTrendIncreasing": { "points": 1, "pointsIfSignificant": 2 },
+    "currentTempC": [
+      { "atLeast": 33, "points": 1 },
+      { "atLeast": 38, "points": 2 }
+    ]
+  },
+
+  "fire": {
+    "_about": "NASA FIRMS detections in the last 'days' days. 'radiusKm' is the search distance from the field centre; 'nearKm' counts as close to the field.",
+    "days": 10,
+    "radiusKm": 50,
+    "nearKm": 10,
+    "detectionsInRadius": [
+      { "atLeast": 1, "points": 1 },
+      { "atLeast": 10, "points": 2 }
+    ],
+    "detectionsNear": [
+      { "atLeast": 1, "points": 2 }
+    ],
+    "drySoilBelowNormPct": { "atLeast": 10, "points": 1 },
+    "hotNowC": { "atLeast": 30, "points": 1 },
+    "lowHumidityPct": { "below": 30, "points": 1 }
+  }
+}

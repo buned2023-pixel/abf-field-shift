@@ -1,0 +1,125 @@
+{
+  "_about": "Rules for the crop advisor. No AI: every recommendation comes from these numbers plus the NASA and terrain data of the field. Edit freely and reload the page. Advisory only: confirm with a local agronomist.",
+
+  "scoring": {
+    "_about": "Each factor gets a fit from 0 to 1: 1 inside the crop's range, falling to 0 over the 'tolerance' outside it. The score (0-100) is the weighted sum.",
+    "weights": { "temperature": 30, "water": 30, "soil": 10, "elevation": 15, "slope": 15 },
+    "tolerance": { "temperatureC": 5, "waterPct": 45, "soil": 0.15, "elevationM": 400, "slopeDeg": 6 },
+    "heatPenaltyPerDegC": 4,
+    "preferenceBonus": 8,
+    "droughtPenalty": { "_about": "Applied when the DROUGHT badge is medium/high, the field is not irrigated, and the crop's waterNeed is listed.", "medium": { "high": 6 }, "high": { "high": 15, "medium": 6 } }
+  },
+
+  "water": {
+    "_about": "Extra water (mm per year) on top of rainfall, by the farmer's answers. 'irrigated' is used when irrigation = yes.",
+    "irrigated": { "low": 150, "medium": 350, "high": 700 },
+    "rainfed": { "low": 0, "medium": 60, "high": 120 },
+    "irrigatedSoilMoistureFloor": 0.55
+  },
+
+  "warnings": {
+    "steepSlopeDeg": 8,
+    "verySteepSlopeDeg": 15,
+    "drySowingMonthMm": 15
+  },
+
+  "rotation": {
+    "_about": "3-year plan. Avoid the same family two years running, include a nitrogen-fixing legume, and follow it with a crop that uses the nitrogen.",
+    "years": 3,
+    "minScore": 35,
+    "legumeBonus": 14,
+    "afterLegumeFeederBonus": 8,
+    "sameFamilyPenalty": 100
+  },
+
+  "crops": [
+    {
+      "id": "wheat", "name": "Winter wheat", "family": "cereal", "color": "#d9b84a", "color2": "#c9a53a", "rowHeightM": 0.9,
+      "growMonths": [3, 4, 5, 6], "temperatureC": [8, 24], "maxTempLimitC": 34,
+      "waterMm": [350, 650], "waterNeed": "medium", "soilMoisture": [0.35, 0.8],
+      "elevationM": [300, 2500], "maxSlopeDeg": 12,
+      "sowing": { "season": "autumn", "tempC": [8, 16], "what": "Sow" },
+      "soilEffect": { "nitrogen": -1, "note": "Cereal: uses nitrogen, leaves straw that protects the soil." }
+    },
+    {
+      "id": "barley", "name": "Barley", "family": "cereal", "color": "#e3c866", "color2": "#d2b552", "rowHeightM": 0.8,
+      "growMonths": [3, 4, 5, 6], "temperatureC": [6, 22], "maxTempLimitC": 32,
+      "waterMm": [250, 550], "waterNeed": "low", "soilMoisture": [0.3, 0.75],
+      "elevationM": [300, 3000], "maxSlopeDeg": 14,
+      "sowing": { "season": "autumn", "tempC": [6, 16], "what": "Sow" },
+      "soilEffect": { "nitrogen": -1, "note": "Hardy cereal for dry and high land; light nitrogen user." }
+    },
+    {
+      "id": "maize", "name": "Maize", "family": "cereal", "color": "#7fc241", "color2": "#6aad34", "rowHeightM": 1.5,
+      "growMonths": [5, 6, 7, 8, 9], "temperatureC": [18, 30], "maxTempLimitC": 38,
+      "waterMm": [500, 900], "waterNeed": "high", "soilMoisture": [0.45, 0.85],
+      "elevationM": [300, 1800], "maxSlopeDeg": 8,
+      "sowing": { "season": "spring", "tempC": [12, 18], "what": "Sow" },
+      "soilEffect": { "nitrogen": -2, "note": "Heavy feeder: takes a lot of nitrogen, best after a legume." }
+    },
+    {
+      "id": "potato", "name": "Potato", "family": "nightshade", "color": "#5fae52", "color2": "#4f9a45", "rowHeightM": 0.6,
+      "growMonths": [4, 5, 6, 7, 8], "temperatureC": [12, 22], "maxTempLimitC": 30,
+      "waterMm": [450, 750], "waterNeed": "medium", "soilMoisture": [0.45, 0.8],
+      "elevationM": [800, 3000], "maxSlopeDeg": 8,
+      "sowing": { "season": "spring", "tempC": [8, 14], "what": "Plant tubers" },
+      "soilEffect": { "nitrogen": -1, "note": "Loosens the soil; do not follow with tomato (same family, shared diseases)." }
+    },
+    {
+      "id": "onion", "name": "Onion", "family": "allium", "color": "#8fc98a", "color2": "#7bb876", "rowHeightM": 0.5,
+      "growMonths": [3, 4, 5, 6, 7], "temperatureC": [12, 26], "maxTempLimitC": 35,
+      "waterMm": [400, 700], "waterNeed": "medium", "soilMoisture": [0.4, 0.75],
+      "elevationM": [300, 2200], "maxSlopeDeg": 6,
+      "sowing": { "season": "spring", "tempC": [7, 14], "what": "Sow or set" },
+      "soilEffect": { "nitrogen": -1, "note": "Shallow roots; a good break crop between cereals and vegetables." }
+    },
+    {
+      "id": "tomato", "name": "Tomato", "family": "nightshade", "color": "#4fa84a", "color2": "#c9503c", "rowHeightM": 1.0,
+      "growMonths": [5, 6, 7, 8, 9], "temperatureC": [18, 28], "maxTempLimitC": 36,
+      "waterMm": [500, 800], "waterNeed": "high", "soilMoisture": [0.45, 0.8],
+      "elevationM": [300, 1800], "maxSlopeDeg": 6,
+      "sowing": { "season": "spring", "tempC": [14, 20], "what": "Transplant seedlings" },
+      "soilEffect": { "nitrogen": -2, "note": "Heavy feeder; needs steady water and a different family the year before." }
+    },
+    {
+      "id": "chickpea", "name": "Chickpea", "family": "legume", "color": "#9bbf5a", "color2": "#88ad4a", "rowHeightM": 0.5,
+      "growMonths": [3, 4, 5, 6], "temperatureC": [12, 26], "maxTempLimitC": 35,
+      "waterMm": [250, 500], "waterNeed": "low", "soilMoisture": [0.3, 0.65],
+      "elevationM": [300, 2200], "maxSlopeDeg": 12,
+      "sowing": { "season": "spring", "tempC": [7, 14], "what": "Sow" },
+      "soilEffect": { "nitrogen": 1, "note": "Legume: adds nitrogen for the next crop and needs little water." }
+    },
+    {
+      "id": "lentil", "name": "Lentil", "family": "legume", "color": "#a7c86a", "color2": "#93b558", "rowHeightM": 0.5,
+      "growMonths": [3, 4, 5, 6], "temperatureC": [10, 24], "maxTempLimitC": 32,
+      "waterMm": [250, 450], "waterNeed": "low", "soilMoisture": [0.3, 0.65],
+      "elevationM": [500, 2500], "maxSlopeDeg": 12,
+      "sowing": { "season": "spring", "tempC": [6, 12], "what": "Sow" },
+      "soilEffect": { "nitrogen": 1, "note": "Legume: adds nitrogen; suits cooler, drier uplands." }
+    },
+    {
+      "id": "alfalfa", "name": "Alfalfa", "family": "legume", "perennialYears": 4, "color": "#3f9a5a", "color2": "#33894e", "rowHeightM": 0.7,
+      "growMonths": [4, 5, 6, 7, 8, 9], "temperatureC": [12, 28], "maxTempLimitC": 38,
+      "waterMm": [500, 1000], "waterNeed": "high", "soilMoisture": [0.4, 0.8],
+      "elevationM": [300, 2500], "maxSlopeDeg": 15, "protectsSlopes": true,
+      "sowing": { "season": "spring", "tempC": [10, 18], "what": "Sow" },
+      "soilEffect": { "nitrogen": 2, "note": "Perennial legume: builds nitrogen over 3-5 years and its deep roots hold the soil." }
+    },
+    {
+      "id": "cotton", "name": "Cotton", "family": "fibre", "color": "#6ea85e", "color2": "#e8ecef", "rowHeightM": 1.1,
+      "growMonths": [5, 6, 7, 8, 9], "temperatureC": [22, 32], "maxTempLimitC": 42,
+      "waterMm": [600, 1000], "waterNeed": "high", "soilMoisture": [0.4, 0.8],
+      "elevationM": [300, 1000], "maxSlopeDeg": 5,
+      "sowing": { "season": "spring", "tempC": [15, 20], "what": "Sow" },
+      "soilEffect": { "nitrogen": -2, "note": "Heavy feeder and water user; rotate with alfalfa or a grain legume." }
+    },
+    {
+      "id": "apricot", "name": "Apricot orchard", "family": "orchard", "perennialYears": 25, "color": "#4e9a48", "color2": "#e39a3c", "rowHeightM": 1.5,
+      "growMonths": [4, 5, 6, 7, 8], "temperatureC": [14, 28], "maxTempLimitC": 40,
+      "waterMm": [350, 700], "waterNeed": "medium", "soilMoisture": [0.3, 0.7],
+      "elevationM": [500, 2200], "maxSlopeDeg": 20, "protectsSlopes": true,
+      "sowing": { "season": "spring", "tempC": [6, 14], "what": "Plant saplings" },
+      "soilEffect": { "nitrogen": 0, "note": "Permanent orchard: tree roots hold slopes; grow a legume between the rows in the first years." }
+    }
+  ]
+}
