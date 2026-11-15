@@ -6,6 +6,8 @@ const fs = require('fs');
 const path = require('path');
 
 const { rateLimit, budget } = require('./lib/limits');
+const redact = require('./lib/redact');
+redact.patchConsole(); // key values are replaced by *** in every log line
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -28,6 +30,7 @@ const DEFAULT_LOCATION = { lat: 38.56, lon: 68.77, city: 'Dushanbe', country: 'T
 app.get('/health', (req, res) => res.json({ ok: true }));
 
 // Rate limits per visitor: all API routes, and tighter ones for the routes that use paid quotas
+app.use('/api/', redact.replies); // no key value can reach a reply
 app.use('/api/', rateLimit({ name: 'api', windowMs: 5 * 60 * 1000, max: envInt('API_RATE_LIMIT', 300) }));
 app.use(['/api/weather', '/api/location', '/api/geocode'], rateLimit({ name: 'paid', windowMs: 60 * 60 * 1000, max: 40 }));
 
@@ -293,7 +296,7 @@ app.get('/api/power', async (req, res) => {
       const saved = readPowerFile(lat, lon);
       if (!saved) {
         console.warn(`[power] ${lat},${lon}: live request failed (${err.message}) and no saved copy exists`);
-        return res.status(502).json({ error: 'power_unavailable', reason: err.message });
+        return res.status(502).json({ error: 'power_unavailable' });
       }
       console.warn(`[power] ${lat},${lon}: live request failed (${err.message}); serving saved copy from ${saved.savedAt}`);
       result = { ...saved, stale: true };
@@ -667,6 +670,9 @@ app.get('/api/crops', (req, res) => {
 });
 
 // ─── Start server ─────────────────────────────────────────────────────────────
+
+// Unexpected errors: short JSON reply, no stack trace
+app.use(redact.errors);
 
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`Field Shift server running on port ${PORT} (http://localhost:${PORT})`);

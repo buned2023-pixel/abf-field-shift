@@ -71,6 +71,14 @@ Add `IPSTACK_KEY`, `WEATHERSTACK_KEY` and `FIRMS_MAP_KEY` in the Render dashboar
 `/api/*` per visitor and caps daily Weatherstack and IPstack calls so the free API quotas last.
 On the free plan the disk is temporary: accounts saved on the server are lost when it restarts.
 
+## Limits
+
+The free API plans have monthly quotas (Weatherstack and IPstack: about 100 calls a month each), so the
+live app may show saved data or a short "not available right now" message when they run out. To protect
+them, the server caches answers, caps Weatherstack and IPstack at a few calls a day, and rate-limits every
+`/api` route per visitor. NASA POWER answers are saved, so climate charts and risks keep working from the
+saved copy when the live service is down. API keys stay on the server and are never sent to the browser.
+
 ## Project layout
 
 - `server.js`, `lib/`: Express server, API proxies, caches, accounts, rate limits

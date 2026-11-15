@@ -27,6 +27,9 @@ something failed, is blocked, or needs my decision, say so in one short line.
 - `lib/limits.js`: per-IP rate limit on `/api/*` (`API_RATE_LIMIT`, default 300 per 5 min; 40 per hour on
   weather/location/geocode) and daily caps on paid upstream calls (`WEATHERSTACK_DAILY_LIMIT`,
   `IPSTACK_DAILY_LIMIT`, default 3 each; cached answers are free). Counters reset on restart.
+- `lib/redact.js`: key values are replaced by *** in all log lines and /api replies; unexpected errors
+  answer short JSON without a stack trace.
+- Live: https://abf-field-shift.onrender.com (auto-deploys from `main` on GitHub).
 - Free plan disk is temporary: `data/accounts.db` (accounts, saved fields) is lost on every restart or deploy.
 
 ## Layout
