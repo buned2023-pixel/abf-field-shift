@@ -209,6 +209,25 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
 body { transition: opacity 0.4s var(--ease); }
 body.leaving { opacity: 0; }
 
+
+/* ── Stage B ── */
+/* GSAP drives the reveals: switch off the CSS transitions it would fight with */
+.gsap .reveal, .gsap [data-split] .line > span { transition: none; }
+
+/* Intro: logo + 0–100 % counter, at most 2.5 s (landing.js); never shown without JavaScript */
+.intro { position: fixed; inset: 0; z-index: 90; display: grid; place-items: center; background: var(--navy); cursor: pointer; transition: opacity 0.4s var(--ease); }
+.intro.out { opacity: 0; pointer-events: none; }
+.intro-logo { --k: 0.6; font-size: clamp(40px, 7vw, 84px); gap: 0.4em; }
+.intro-logo .abf-mark { width: clamp(120px, 22vw, 240px); height: auto; }
+.intro-count { position: absolute; right: var(--pad); bottom: clamp(16px, 4vw, 40px); font: 700 clamp(44px, 8vw, 112px)/1 var(--head); color: var(--off); font-variant-numeric: tabular-nums; opacity: 0.9; }
+
+/* How it works (wide screens): the active step is bright, the others dimmed */
+@media (min-width: 900px) {
+  .how-steps .step h3, .how-steps .step p, .how-steps .step .step-n { transition: opacity 0.6s var(--ease); }
+  .how-steps .step:not(.active) h3, .how-steps .step:not(.active) p, .how-steps .step:not(.active) .step-n { opacity: 0.38; }
+  .gsap .how-progress span { transition: none; }
+}
+
 /* ── Responsive ── */
 @media (max-width: 1100px) { .cards { grid-template-columns: repeat(2, 1fr); } .stats { grid-template-columns: repeat(2, 1fr); } }
 @media (max-width: 899px) {
@@ -240,4 +259,5 @@ body.leaving { opacity: 0; }
   .ticker-track { animation: none; }
   .hero-parallax { transform: none !important; }
   .faq details[open] p { animation: none; }
+  .how-steps .step:not(.active) h3, .how-steps .step:not(.active) p, .how-steps .step:not(.active) .step-n { opacity: 1; }
 }

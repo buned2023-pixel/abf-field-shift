@@ -11,7 +11,8 @@ something failed, is blocked, or needs my decision, say so in one short line.
 
 ## Run
 
-- `npm start` → http://localhost:3000/map/ (3D app). `/` is the older 2D climate dashboard.
+- `npm start` → http://localhost:3000/map/ (3D app). `/` is the public landing page; `/dev/` is the older
+  2D API test dashboard.
 - `npm run build-trees` → rebuilds `public/data/trees.bin` from OpenStreetMap (stops itself after
   100 s; run again to continue, results are cached in `data/trees-cache/`).
 - Keys live only in `.env` (IPSTACK_KEY, WEATHERSTACK_KEY, FIRMS_MAP_KEY). The backend proxies every
@@ -25,6 +26,10 @@ something failed, is blocked, or needs my decision, say so in one short line.
   1 h cache, disk copy in `data/power-cache/daily/`), `/api/disease-rules`, `/api/landcheck` and
   `/api/landzones` (Overpass), `/api/risk-rules`, `/api/crop-rules`, `/tiles/terrarium/...` (DEM proxy
   with disk cache in `data/tile-cache/`). Cache: 10 min in memory; errors are never cached.
+- Landing page: `public/index.html`, `public/landing/landing.css`, `public/landing/landing.js` (GSAP 3.12.5 +
+  ScrollTrigger + Lenis 1.1.13 from CDN; without them, or with reduced motion, plain CSS fade-ins). English
+  only; mention only features the app really has. Self-hosted fonts in `public/landing/fonts/`. Optional
+  screenshots `public/landing/{map,risks,plan}.png` replace the SVG pictures when present.
 - Logo: `public/logo.css` (animated logo, inline SVG + CSS keyframes, `--k` scales the timing),
   `public/logo-animation.html` (full-screen 1920x1080, ~4 s, R or click replays; for screen recording),
   `public/img/abf-mark.svg` (static mark and favicon). The map loader plays the full animation once per
