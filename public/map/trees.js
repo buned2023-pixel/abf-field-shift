@@ -53,7 +53,11 @@
   const mercX = (lon) => (lon + 180) / 360;
   const mercY = (lat) => (1 - Math.log(Math.tan(Math.PI / 4 + rad(lat) / 2)) / Math.PI) / 2;
 
-  function setStatus(text) { const el = $('plantStatus'); if (el) el.textContent = text || ''; }
+  // Status text is kept as a function so a language switch can redraw it
+  let statusFn = null;
+  function setStatus(fn) { statusFn = typeof fn === 'function' ? fn : null; const el = $('plantStatus'); if (el) el.textContent = statusFn ? statusFn() : (fn || ''); }
+  if (window.FSi18n) window.FSi18n.onChange(() => { if (statusFn) setStatus(statusFn); });
+  const t = (k, v) => window.FSi18n.t(k, v);
 
   // ── Data ──
   async function loadData() {
@@ -84,7 +88,7 @@
       stats.total = n; stats.loaded = true;
     } catch (err) {
       data = null; stats.loaded = false;
-      setStatus('No tree data yet. Run "npm run build-trees" to create it.');
+      setStatus(() => t('trees.noData'));
     }
   }
 
@@ -289,8 +293,9 @@
     stats.drawn = list.length; stats.ms = Math.round(performance.now() - t0);
     stats.byType = per.map((a) => a.length / 8);
     const pct = Math.round(stats.fraction * 100);
-    setStatus(map.getZoom() < ZOOM_MIN ? 'Zoom in to level 8+ to see trees'
-      : `${list.length.toLocaleString('en-US')} trees shown · ${stats.inView.toLocaleString('en-US')} in view · zoom rule ${pct}%`);
+    const shown = list.length, inView = stats.inView;
+    setStatus(map.getZoom() < ZOOM_MIN ? () => t('trees.zoomIn')
+      : () => t('trees.shown', { shown: window.FSi18n.fmt(shown), inView: window.FSi18n.fmt(inView), pct: window.FSi18n.fmt(pct) }));
     map.triggerRepaint();
   }
   function scheduleRebuild(delay) { clearTimeout(rebuildTimer); rebuildTimer = setTimeout(rebuild, delay == null ? 150 : delay); }
@@ -304,7 +309,7 @@
     render(context, args) {
       if (glFailed) return;
       if (!program) {
-        try { setupGl(); } catch (err) { console.warn('[trees] WebGL setup failed', err); glFailed = true; program = null; setStatus('3D trees are not supported in this browser.'); return; }
+        try { setupGl(); } catch (err) { console.warn('[trees] WebGL setup failed', err); glFailed = true; program = null; setStatus(() => t('trees.noGl')); return; }
       }
       if (needMeshes) buildMeshes();
       if (pendingArrays) uploadPending();

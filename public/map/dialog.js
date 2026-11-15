@@ -6,7 +6,7 @@
 (function () {
   'use strict';
 
-  function open({ title, message, okText = 'OK', cancelText = 'Cancel', danger = false, input = null }) {
+  function open({ title, message, okText = window.FSi18n.t('dlg.ok'), cancelText = window.FSi18n.t('dlg.cancel'), danger = false, input = null }) {
     return new Promise((resolve) => {
       const back = document.createElement('div');
       back.className = 'modal-backdrop';

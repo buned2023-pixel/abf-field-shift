@@ -16,6 +16,7 @@ const FIRMS_MAP_KEY = process.env.FIRMS_MAP_KEY;
 const DEFAULT_LOCATION = { lat: 38.56, lon: 68.77, city: 'Dushanbe', country: 'Tajikistan' };
 
 app.use(express.static(path.join(__dirname, 'public')));
+app.use('/locales', express.static(path.join(__dirname, 'locales'))); // UI texts: en, ru, tg
 
 /**
  * Helper: fetch a URL and return the raw body as a string.

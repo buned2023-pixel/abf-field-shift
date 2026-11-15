@@ -12,12 +12,14 @@
 (function () {
   'use strict';
 
-  const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const I18N = window.FSi18n, t = I18N.t;
+  const MONTHS = Array.from({ length: 12 }, (_, i) => i); // month index; names come from I18N.month()
+  const mon = (i) => I18N.month(i);
   const SENSOR_COLOR = { VIIRS: '#ff5a1f', MODIS: '#ffd43b' };
   const CHARTS = [
-    { key: 'rain', title: 'Rainfall', unit: 'mm / year', color: '#5aaeff', dec: 0, canvas: 'tlRain' },
-    { key: 'temp', title: 'Temperature', unit: '°C, yearly mean', color: '#ff8a5c', dec: 1, canvas: 'tlTemp' },
-    { key: 'soil', title: 'Root soil moisture', unit: '0 dry – 1 saturated', color: '#5fd68a', dec: 2, canvas: 'tlSoil' },
+    { key: 'rain', color: '#5aaeff', dec: 0, canvas: 'tlRain' },
+    { key: 'temp', color: '#ff8a5c', dec: 1, canvas: 'tlTemp' },
+    { key: 'soil', color: '#5fd68a', dec: 2, canvas: 'tlSoil' },
   ];
 
   let map = null, opts = null, rules = null;
@@ -30,7 +32,7 @@
 
   const $ = (id) => document.getElementById(id);
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-  const fmt = (n, d = 0) => (n == null || !isFinite(n) ? 'No data' : Number(n).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d }));
+  const fmt = I18N.fmt;
   const signed = (n, d = 0) => (n > 0 ? '+' : n < 0 ? '−' : '') + fmt(Math.abs(n), d);
   const mean = (a) => { const v = a.filter((x) => x != null && isFinite(x)); return v.length ? v.reduce((s, x) => s + x, 0) / v.length : null; };
   const daysIn = (y, m) => new Date(y, m, 0).getDate();
@@ -102,7 +104,7 @@
     let tm = of(ty).filter((m) => m.precip != null && m.temp != null && m.soil != null);
     if (ty > d.lastFullYear && tm.length < rules.currentYear.minMonths) { ty = d.lastFullYear; tm = of(ty).filter((m) => m.precip != null && m.temp != null && m.soil != null); }
     const months = tm.map((m) => m.month);
-    const span = months.length === 12 ? 'full year' : months.length ? `${MONTHS[months[0] - 1]}–${MONTHS[months[months.length - 1] - 1]}` : '';
+    const span = months.length ? { first: months[0] - 1, last: months[months.length - 1] - 1, full: months.length === 12 } : null;
     const rainNow = tm.reduce((s, m) => s + m.precip * daysIn(ty, m.month), 0);
     const rainNorm = tm.reduce((s, m) => s + norm.precip[m.month - 1] * daysIn(ty, m.month), 0);
     const tempNow = mean(tm.map((m) => m.temp)), tempNorm = mean(tm.map((m) => norm.temp[m.month - 1]));
@@ -134,7 +136,12 @@
   // ── Risk scoring (rules from config/risk-rules.json) ──
   const tier = (list, value) => list.reduce((p, r) => (value >= r.atLeast ? Math.max(p, r.points) : p), 0);
   const levelOf = (points) => (points >= rules.levels.high ? 'high' : points >= rules.levels.medium ? 'medium' : 'low');
-  const trendWords = (t, unit) => `${t.dir === 'stable' ? 'stable' : t.dir === 'increasing' ? 'rising' : 'falling'} (${signed(unit === 'deg' ? t.perDecade : t.pct, unit === 'deg' ? 2 : 0)}${unit === 'deg' ? ' °C' : '%'} per decade${t.dir !== 'stable' ? (t.significant ? ', significant' : ', not significant') : ''})`;
+  const spanText = (sp) => (!sp ? '' : sp.full ? t('cl.fullYear') : `${mon(sp.first)}–${mon(sp.last)}`);
+  const trendWords = (tr, unit) => t('risk.trendWords', {
+    dir: t('risk.dir.' + tr.dir),
+    v: `${signed(unit === 'deg' ? tr.perDecade : tr.pct, unit === 'deg' ? 2 : 0)}${unit === 'deg' ? ' °C' : '%'}`,
+    sig: tr.dir !== 'stable' ? t(tr.significant ? 'risk.sigYes' : 'risk.sigNo') : '',
+  });
 
   function scoreRisks() {
     const a = state.analysis, w = state.weather, f = state.firms, out = {};
@@ -147,7 +154,7 @@
       p += tier(R.soilBelowNormPct, soilBelow) + tier(R.rainBelowNormPct, rainBelow);
       out.drought = {
         level: levelOf(p), points: p,
-        why: `Rainfall trend over 20 years is ${trendWords(rt, 'pct')}; in ${ty.year} (${ty.span}) root soil moisture is ${fmt(ty.soil.now, 2)} against a norm of ${fmt(ty.soil.norm, 2)} (${signed(ty.soil.pct)}%) and rainfall is ${fmt(ty.rain.now)} mm against ${fmt(ty.rain.norm)} mm (${signed(ty.rain.pct)}%).`,
+        why: t('risk.droughtWhy', { trend: trendWords(rt, 'pct'), year: ty.year, span: spanText(ty.span), soil: fmt(ty.soil.now, 2), soilNorm: fmt(ty.soil.norm, 2), soilPct: signed(ty.soil.pct), rain: fmt(ty.rain.now), rainNorm: fmt(ty.rain.norm), rainPct: signed(ty.rain.pct) }),
       };
       // HEAT: months with maximum temperature above normal, the T2M_MAX trend, and the temperature right now
       const H = rules.heat, tt = a.trends.tmax, n = a.heat.hotMonths.length;
@@ -157,9 +164,9 @@
       const hm = a.heat.hottest;
       out.heat = {
         level: levelOf(p), points: p,
-        why: `${n} of the last ${a.heat.checked} months had maximum temperatures at least ${fmt(H.hotMonthMarginC, 1)} °C above the 20-year normal` +
-          (hm ? `; the hottest was ${MONTHS[hm.month - 1]} ${hm.year} at ${fmt(hm.tmax, 1)} °C (${signed(hm.over, 1)} °C)` : '') +
-          `. Yearly maximum-temperature trend is ${trendWords(tt, 'deg')}.`,
+        why: t('risk.heatWhy', { hot: fmt(n), checked: fmt(a.heat.checked), margin: fmt(H.hotMonthMarginC, 1) }) +
+          (hm ? t('risk.heatHottest', { month: I18N.monthLong(hm.month - 1), year: hm.year, t: fmt(hm.tmax, 1), over: signed(hm.over, 1) }) : '') +
+          t('risk.heatTrend', { trend: trendWords(tt, 'deg') }),
       };
     }
     if (f) {
@@ -170,83 +177,68 @@
       if (a) {
         const soilBelow = Math.max(0, -a.thisYear.soil.pct);
         if (soilBelow >= F.drySoilBelowNormPct.atLeast) p += F.drySoilBelowNormPct.points;
-        parts.push(`root soil moisture is ${signed(a.thisYear.soil.pct)}% against the 20-year norm`);
+        parts.push(t('risk.fireSoil', { pct: signed(a.thisYear.soil.pct) }));
       }
       if (w && w.temperature != null) {
         if (w.temperature >= F.hotNowC.atLeast) p += F.hotNowC.points;
         if (w.humidity != null && w.humidity < F.lowHumidityPct.below) p += F.lowHumidityPct.points;
-        parts.push(`it is ${fmt(w.temperature)} °C with ${fmt(w.humidity)}% humidity now`);
+        parts.push(t('risk.fireAir', { t: fmt(w.temperature), h: fmt(w.humidity) }));
       }
       out.fire = {
         level: levelOf(p), points: p,
-        why: (f.inRadius ? `NASA FIRMS shows ${f.inRadius} fire detection${f.inRadius > 1 ? 's' : ''} within ${F.radiusKm} km in the last ${f.days} days (${f.near} within ${F.nearKm} km, nearest ${fmt(f.nearestKm, f.nearestKm < 10 ? 1 : 0)} km away)`
-          : `NASA FIRMS shows no fire detections within ${F.radiusKm} km in the last ${f.days} days`) + (parts.length ? `; ${parts.join(' and ')}.` : '.'),
+        why: (f.inRadius ? t('risk.fireSome', { n: f.inRadius, r: fmt(F.radiusKm), days: fmt(f.days), near: fmt(f.near), nearKm: fmt(F.nearKm), nearest: fmt(f.nearestKm, f.nearestKm < 10 ? 1 : 0) })
+          : t('risk.fireNone', { r: fmt(F.radiusKm), days: fmt(f.days) })) + (parts.length ? `; ${I18N.list(parts)}.` : '.'),
       };
     }
     state.risks = out;
   }
 
   // ── Badges (shown in the Field overview) ──
-  const help = (tip) => `<button type="button" class="help" data-tip="${esc(tip)}" aria-label="Help: ${esc(tip)}">?</button>`;
-  const BADGES = [
-    ['drought', 'Drought risk', 'powerErr', 'Chance that the field gets too little water, from 20 years of rain and soil-moisture data.'],
-    ['heat', 'Heat risk', 'powerErr', 'Chance that plants are stressed by heat, from recent hot months and the temperature now.'],
-    ['fire', 'Fire risk', 'firmsErr', 'Chance of fire near the field, from fires seen by satellites in the last 10 days plus dry, hot weather.'],
-  ];
+  const help = (tip) => `<button type="button" class="help" data-tip="${esc(tip)}" aria-label="${esc(t('common.helpAria', { tip }))}">?</button>`;
+  const BADGES = [['drought', 'powerErr'], ['heat', 'powerErr'], ['fire', 'firmsErr']]; // texts: risk.<key>.name / .tip
   const LEVEL_ICON = { low: '✓', medium: '!', high: '▲' };
-  // What the level means and what to do, in plain words
-  const ADVICE = {
-    drought: { low: 'Enough rain and soil water now. Normal watering is fine.', medium: 'Drier than usual. Water a bit more often and keep the soil covered.', high: 'Very dry. Choose crops that need little water and plan irrigation.' },
-    heat: { low: 'Temperatures are normal for this place.', medium: 'Hotter than usual. Water early in the morning and avoid work at midday.', high: 'Very hot. Shade young plants, water morning or evening, protect workers.' },
-    fire: { low: 'No fires close to this field.', medium: 'Fires were seen in the area. Clear dry grass around the field.', high: 'Fires are close. Remove dry plants, keep water ready, watch for smoke.' },
-  };
+  // What the level means and what to do, in plain words: risk.<key>.advice.<level>
   function badgesHtml(fieldId) {
     if (!current || current.id !== fieldId) return '';
-    const rows = BADGES.map(([key, label, errKey, tip]) => {
+    const rows = BADGES.map(([key, errKey]) => {
       const r = state.risks && state.risks[key];
-      const head = (lvl) => `<div class="risk-head"><span class="risk-name">${label} ${help(tip)}</span>${lvl}</div>`;
+      const head = (lvl) => `<div class="risk-head"><span class="risk-name">${esc(t(`risk.${key}.name`))} ${help(t(`risk.${key}.tip`))}</span>${lvl}</div>`;
       if (r) {
-        return `<div class="risk risk-${key} lvl-${r.level}">${head(`<span class="risk-level"><span aria-hidden="true">${LEVEL_ICON[r.level]}</span> ${r.level.toUpperCase()}</span>`)}` +
-          `<p class="risk-say">${esc(ADVICE[key][r.level])}</p><details class="risk-more"><summary>Details from NASA data</summary><p class="risk-why">${esc(r.why)}</p></details></div>`;
+        return `<div class="risk risk-${key} lvl-${r.level}">${head(`<span class="risk-level"><span aria-hidden="true">${LEVEL_ICON[r.level]}</span> ${esc(t('risk.level.' + r.level))}</span>`)}` +
+          `<p class="risk-say">${esc(t(`risk.${key}.advice.${r.level}`))}</p><details class="risk-more"><summary>${esc(t('risk.details'))}</summary><p class="risk-why">${esc(r.why)}</p></details></div>`;
       }
-      const msg = state[errKey] ? 'No data right now: the NASA service could not be reached.' : 'Loading NASA data…';
+      const msg = esc(t(state[errKey] ? 'risk.noData' : 'risk.loading'));
       return `<div class="risk risk-${key} lvl-none">${head('<span class="risk-level">…</span>')}<p class="risk-say">${msg}</p></div>`;
     }).join('');
-    return `<div class="metric wide risk-box"><div class="k">Risks for this field</div>${rows}</div>`;
+    return `<div class="metric wide risk-box"><div class="k">${esc(t('risk.title'))}</div>${rows}</div>`;
   }
 
   // ── Timeline panel ──
-  // Trend as an arrow + plain word: "Getting drier", "Getting warmer", "Stable"
-  const TREND_WORDS = {
-    rain: { increasing: 'Getting wetter', decreasing: 'Getting drier' },
-    temp: { increasing: 'Getting warmer', decreasing: 'Getting cooler' },
-    soil: { increasing: 'Soil getting wetter', decreasing: 'Soil getting drier' },
-  };
-  function trendBadge(t, key) {
-    const arrow = t.dir === 'increasing' ? '↗' : t.dir === 'decreasing' ? '↘' : '→';
-    const word = t.dir === 'stable' ? 'Stable' : TREND_WORDS[key][t.dir];
-    const sure = t.dir === 'stable' ? '' : t.significant ? ' (clear trend)' : ' (weak trend)';
-    return `<span class="tl-trend ${t.dir}"><span aria-hidden="true">${arrow}</span> ${word}</span>` +
-      help(`Trend = the direction over 20 years, from a straight line through the yearly values${sure ? '. "' + sure.trim().slice(1, -1) + '": ' + (t.significant ? 'the change is bigger than normal year-to-year ups and downs' : 'the change could be normal year-to-year variation') : ''}.`);
+  // Trend as an arrow + plain word ("Getting drier", "Getting warmer", "Stable"): tl.trend.<key>.<dir>
+  function trendBadge(tr, key) {
+    const arrow = tr.dir === 'increasing' ? '↗' : tr.dir === 'decreasing' ? '↘' : '→';
+    const word = tr.dir === 'stable' ? t('tl.trend.stable') : t(`tl.trend.${key}.${tr.dir}`);
+    const tip = tr.dir === 'stable' ? t('tl.trendTip') : `${t('tl.trendTip')} ${t(tr.significant ? 'tl.trendClear' : 'tl.trendWeak')}`;
+    return `<span class="tl-trend ${tr.dir}"><span aria-hidden="true">${arrow}</span> ${esc(word)}</span>` + help(tip);
   }
-  const SOIL_WORD = (v) => (v == null ? '' : v < 0.35 ? 'dry' : v > 0.6 ? 'wet' : 'normal');
+  const SOIL_WORD = (v) => (v == null ? '' : t(v < 0.35 ? 'tl.soilDry' : v > 0.6 ? 'tl.soilWet' : 'tl.soilNormal'));
 
   function renderWeather() {
     const el = $('wxCard');
     if (!el) return;
     const w = state.weather;
-    if (state.weatherErr) { el.innerHTML = '<div class="k">Weather now</div><p class="tl-msg">The weather service could not be reached. <button type="button" class="btn-sm tl-retry">Try again</button></p>'; return; }
-    if (!w) { el.innerHTML = '<div class="k">Weather now</div><p class="tl-msg">Loading…</p>'; return; }
+    if (state.weatherErr) { el.innerHTML = `<div class="k">${esc(t('wx.title'))}</div><p class="tl-msg">${esc(t('wx.error'))} <button type="button" class="btn-sm tl-retry">${esc(t('common.retry'))}</button></p>`; return; }
+    if (!w) { el.innerHTML = `<div class="k">${esc(t('wx.title'))}</div><p class="tl-msg">${esc(t('common.loading'))}</p>`; return; }
     const icon = w.icon && /^https:\/\//.test(w.icon) ? `<img src="${esc(w.icon)}" alt="" width="44" height="44">` : '';
     const unitIf = (v, u) => (v == null || !isFinite(v) ? '' : `<small>${u}</small>`);
     el.innerHTML = `
-      <div class="k">Weather now${w.place ? ' · ' + esc(w.place) : ''}</div>
-      <div class="wx-main">${icon}<div><div class="wx-temp">${fmt(w.temperature)}${unitIf(w.temperature, '°C')}</div><div class="wx-desc">${esc((w.description || '').trim())}</div></div></div>
+      <div class="k">${esc(t('wx.title'))}${w.place ? ' · ' + esc(w.place) : ''}</div>
+      <div class="wx-main">${icon}<div><div class="wx-temp">${fmt(w.temperature)}${unitIf(w.temperature, '°C')}</div><div class="wx-desc">${esc(I18N.weather(w.description))}</div></div></div>
       <dl class="wx-stats">
-        <div><dt>Humidity</dt><dd>${fmt(w.humidity)}${unitIf(w.humidity, '%')}</dd></div>
-        <div><dt>Wind</dt><dd>${fmt(w.windSpeed)}${unitIf(w.windSpeed, 'km/h')}</dd></div>
-        <div><dt>Feels like</dt><dd>${fmt(w.feelsLike)}${unitIf(w.feelsLike, '°C')}</dd></div>
-        <div><dt>Rain today</dt><dd>${fmt(w.precip, 1)}${unitIf(w.precip, 'mm')}</dd></div>
+        <div><dt>${esc(t('wx.humidity'))}</dt><dd>${fmt(w.humidity)}${unitIf(w.humidity, '%')}</dd></div>
+        <div><dt>${esc(t('wx.wind'))}</dt><dd>${fmt(w.windSpeed)}${unitIf(w.windSpeed, esc(t('unit.kmh')))}</dd></div>
+        <div><dt>${esc(t('wx.feels'))}</dt><dd>${fmt(w.feelsLike)}${unitIf(w.feelsLike, '°C')}</dd></div>
+        <div><dt>${esc(t('wx.rain'))}</dt><dd>${fmt(w.precip, 1)}${unitIf(w.precip, esc(t('unit.mm')))}</dd></div>
       </dl>`;
   }
 
@@ -259,32 +251,32 @@
       if (!a) {
         head.innerHTML = ''; stat.textContent = '';
         msg.innerHTML = state.powerErr
-          ? 'NASA POWER could not be reached and no saved copy exists for this area. <button type="button" class="btn-sm tl-retry">Try again</button>'
-          : 'Loading 20 years of NASA POWER data…';
+          ? `${esc(t('tl.powerErr'))} <button type="button" class="btn-sm tl-retry">${esc(t('common.retry'))}</button>`
+          : esc(t('tl.powerLoading'));
         msg.hidden = false;
         return;
       }
       msg.hidden = true;
-      const t = a.trends[c.key], ty = a.thisYear, cmp = ty[c.key];
-      const unit = c.key === 'rain' ? ' mm' : c.key === 'temp' ? ' °C' : '';
-      head.innerHTML = trendBadge(t, c.key);
+      const tr = a.trends[c.key], ty = a.thisYear, cmp = ty[c.key];
+      const unit = c.key === 'rain' ? ' ' + t('unit.mm') : c.key === 'temp' ? ' °C' : '';
+      head.innerHTML = trendBadge(tr, c.key);
       const gap = c.key === 'temp' ? `${signed(cmp.diff, 1)} °C` : `${signed(cmp.pct)}%`;
-      const big = c.key === 'soil' ? `${fmt(cmp.now, 2)} <small>${SOIL_WORD(cmp.now)}</small>` : `${fmt(cmp.now, c.dec)}<small>${unit}</small>`;
+      const big = c.key === 'soil' ? `${fmt(cmp.now, 2)} <small>${esc(SOIL_WORD(cmp.now))}</small>` : `${fmt(cmp.now, c.dec)}<small>${unit}</small>`;
       stat.innerHTML = `<span class="tl-big">${big}</span>` +
-        `<span class="tl-cmp">${ty.year}${ty.partial ? ` (${esc(ty.span)})` : ''} · usual for these months: ${fmt(cmp.norm, c.dec)}${unit} (${gap})</span>`;
+        `<span class="tl-cmp">${ty.year}${ty.partial ? ` (${esc(spanText(ty.span))})` : ''} · ${esc(t('tl.usual', { v: `${fmt(cmp.norm, c.dec)}${unit}`, gap }))}</span>`;
       const labels = ty.year > a.years[a.years.length - 1] ? [...a.years, ty.year] : a.years.slice();
       const pad = labels.length - a.years.length;
       const yearlyData = [...a.yearly[c.key], ...Array(pad).fill(null)];
-      const trendData = labels.map((y) => t.intercept + t.slope * y);
+      const trendData = labels.map((y) => tr.intercept + tr.slope * y);
       const nowData = labels.map((y) => (y === ty.year ? ty.marker[c.key] : null));
       charts[c.key] = new Chart($(c.canvas), {
         type: 'line',
         data: {
           labels,
           datasets: [
-            { label: 'Yearly value', data: yearlyData, borderColor: c.color, backgroundColor: c.color + '22', borderWidth: 2, pointRadius: 2, pointHoverRadius: 5, pointBackgroundColor: c.color, fill: true, tension: 0.3, spanGaps: true },
-            { label: 'Trend', data: trendData, borderColor: '#eaeeff', borderWidth: 1.5, borderDash: [6, 4], pointRadius: 0, pointHoverRadius: 0, fill: false },
-            { label: `${ty.year}${ty.partial ? ' (same-month comparison)' : ''}`, data: nowData, borderColor: '#D4F20C', backgroundColor: '#D4F20C', pointRadius: 6, pointHoverRadius: 8, pointBorderColor: '#0A1020', pointBorderWidth: 2, showLine: false },
+            { label: t('tl.dsYearly'), data: yearlyData, borderColor: c.color, backgroundColor: c.color + '22', borderWidth: 2, pointRadius: 2, pointHoverRadius: 5, pointBackgroundColor: c.color, fill: true, tension: 0.3, spanGaps: true },
+            { label: t('tl.dsTrend'), data: trendData, borderColor: '#eaeeff', borderWidth: 1.5, borderDash: [6, 4], pointRadius: 0, pointHoverRadius: 0, fill: false },
+            { label: `${ty.year}${ty.partial ? ` (${t('tl.dsSameMonths')})` : ''}`, data: nowData, borderColor: '#D4F20C', backgroundColor: '#D4F20C', pointRadius: 6, pointHoverRadius: 8, pointBorderColor: '#0A1020', pointBorderWidth: 2, showLine: false },
           ],
         },
         options: {
@@ -316,7 +308,7 @@
     $('tlField').textContent = current.name;
     // Saved copy in use (live NASA POWER failed): say so, with its date
     const p = state.power, note = $('tlStale');
-    if (note) { note.hidden = !(p && p.stale); note.textContent = p && p.stale ? `Offline copy from ${String(p.savedAt || '').slice(0, 10)}` : ''; }
+    if (note) { note.hidden = !(p && p.stale); note.textContent = p && p.stale ? t('tl.offline', { date: I18N.date(p.savedAt) }) : ''; }
     renderWeather();
     renderCharts();
   }
@@ -330,7 +322,7 @@
     map.on('click', 'fires-dot', (e) => {
       const p = e.features[0].properties;
       new maplibregl.Popup({ closeButton: false, className: 'fire-popup' }).setLngLat(e.lngLat)
-        .setHTML(`<b>Fire detection · ${esc(p.sensor)}</b><br>${esc(p.satellite)} · ${esc(p.date)} ${esc(p.time)} UTC<br>Confidence: ${esc(p.confidence)} · Power: ${fmt(+p.frp, 1)} MW<br>${fmt(+p.dist, 1)} km from the field`)
+        .setHTML(`<b>${esc(t('fire.popupTitle'))} · ${esc(p.sensor)}</b><br>${esc(p.satellite)} · ${esc(I18N.date(p.date))} ${esc(p.time)} UTC<br>${esc(t('fire.popupConf', { c: p.confidence, frp: fmt(+p.frp, 1) }))}<br>${esc(t('fire.popupDist', { km: fmt(+p.dist, 1) }))}`)
         .addTo(map);
     });
     map.on('mouseenter', 'fires-dot', () => { map.getCanvas().style.cursor = 'pointer'; });
@@ -354,7 +346,7 @@
     // Labeled pins for the three nearest detections
     if (on && f && current && window.FSStyles) {
       f.list.slice(0, 3).forEach((d) => {
-        const el = window.FSStyles.createPin({ kind: 'fire', title: `${d.sensor} fire`, sub: `${d.date} · ${fmt(d.dist, d.dist < 10 ? 1 : 0)} km` });
+        const el = window.FSStyles.createPin({ kind: 'fire', title: t('fire.pin', { sensor: d.sensor }), sub: `${I18N.date(d.date)} · ${fmt(d.dist, d.dist < 10 ? 1 : 0)} ${t('unit.km')}` });
         firePins.push(new maplibregl.Marker({ element: el, anchor: 'bottom', offset: [0, 5], opacityWhenCovered: '1' }).setLngLat([d.lon, d.lat]).addTo(map));
       });
     }
@@ -420,6 +412,7 @@
 
   async function init(m, options) {
     map = m; opts = options || {};
+    I18N.onChange(() => { if (rules) recompute(); }); // risk sentences, charts and pins in the new language
     setupFireLayers();
     // "Try again" after a failed load: forget the failed parts and request them again
     document.addEventListener('click', (e) => {

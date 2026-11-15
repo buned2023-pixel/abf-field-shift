@@ -239,3 +239,31 @@ body.tl-open .toolbar { bottom: calc(var(--bz) + var(--gap)); }
   .maplibregl-ctrl-bottom-left, .maplibregl-ctrl-bottom-right { bottom: calc(var(--bz) + var(--tool-h) + var(--gap) + 4px) !important; }
 }
 @media (max-width: 420px) { .search input::placeholder { font-size: 13px; } .topbar { gap: 6px; } .brand { padding-right: 2px; } }
+
+/* ── Language switch (EN | RU | TJ) ── */
+.lang-switch { display: inline-flex; flex-shrink: 0; border: 1px solid var(--border); border-radius: 10px; background: var(--raise); padding: 2px; gap: 2px; }
+.lang-switch button { min-width: 34px; height: 38px; padding: 0 6px; border: 0; border-radius: 8px; background: none; color: var(--text-2); font: 700 12px 'Inter', sans-serif; letter-spacing: 0.04em; cursor: pointer; }
+.lang-switch button:hover { color: var(--text); }
+.lang-switch button.on { background: var(--accent); color: #fff; box-shadow: inset 0 0 0 1px rgba(255,255,255,0.25); }
+.lang-switch button:focus-visible { outline: 2px solid var(--accent-text); outline-offset: 1px; }
+@media (max-width: 480px) {
+  .lang-switch button { min-width: 30px; padding: 0 4px; font-size: 11px; }
+  .brand .abf-word { display: none; } /* phone: logo mark only, so search and the switch keep room */
+}
+
+/* ── Cyrillic-safe fonts: Inter everywhere (tabular digits for numbers); Space Grotesk only in the logo ── */
+:root { --mono: 'Inter', system-ui, 'Segoe UI', sans-serif; }
+.mono, .metric .v, .tl-big, .wx-temp, .wx-stats dd, .adv-score, .adv-rank, .field-list .fl-area, .tl-stat b { font-variant-numeric: tabular-nums; }
+.modal, .modal h3, .modal-input, button, input { font-family: 'Inter', system-ui, 'Segoe UI', sans-serif; }
+/* Longer Russian / Tajik words: wrap instead of overflowing buttons, badges and tabs */
+.tool span, .btn-sm, .seg button, .adv-chip, .risk-name, .lg-title, .adv-sub { overflow-wrap: anywhere; hyphens: auto; }
+.btn-sm { white-space: normal; text-align: center; }
+.tl-h { min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
+@media (max-width: 480px) { /* phone: tighter tool buttons so a long RU/TJ "Draw my field" label still fits on one line */
+  .toolbar { gap: 4px; padding: 5px; }
+  .tool { padding: 0 8px; gap: 5px; }
+  .tool.primary span { font-size: 13px; overflow-wrap: normal; }
+}
+@media (max-width: 899px) { /* longer RU/TJ status text must not run under the zoom buttons on the right */
+  .topbar .status-line { left: var(--gap); transform: none; max-width: calc(100vw - 2 * var(--gap) - 68px); }
+}

@@ -20,17 +20,19 @@
   const ESRI_IMAGERY = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
   const ESRI_LABELS = 'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}';
   const SLOPE_CLASSES = [
-    { label: 'Flat <2°', color: '#ffe2b0' },
-    { label: 'Gentle 2–5°', color: '#ffc56b' },
-    { label: 'Moderate 5–15°', color: '#f08a24' },
-    { label: 'Steep >15°', color: '#b4500f' },
+    { key: 'flat', color: '#ffe2b0' },
+    { key: 'gentle', color: '#ffc56b' },
+    { key: 'moderate', color: '#f08a24' },
+    { key: 'steep', color: '#b4500f' },
   ];
-  const ASPECT_NAMES = { N: 'North', NE: 'North-east', E: 'East', SE: 'South-east', S: 'South', SW: 'South-west', W: 'West', NW: 'North-west', flat: 'Flat', mixed: 'Mixed' };
+  const I18N = window.FSi18n, t = I18N.t;
+  const slopeLabel = (i) => t('ov.slope.' + SLOPE_CLASSES[i].key);
+  const aspectName = (a) => t('ov.aspect.' + a);
 
   // ─── Helpers ───────────────────────────────────────────────────────────────
   const $ = (id) => document.getElementById(id);
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-  const fmt = (n, d = 0) => (n == null || !isFinite(n) ? 'No data' : Number(n).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d }));
+  const fmt = I18N.fmt;
   const isMobile = () => window.matchMedia('(max-width: 760px)').matches;
   const uuid = () => (crypto.randomUUID ? crypto.randomUUID() : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
     const r = (Math.random() * 16) | 0; return (c === 'x' ? r : (r & 0x3) | 0x8).toString(16);
@@ -45,8 +47,11 @@
     clearTimeout(toastTimer);
     toastTimer = setTimeout(() => { el.hidden = true; }, 3800);
   }
-  const status = (msg) => { $('statusLine').textContent = msg || ''; };
-  function hint(html) { const el = $('hint'); el.innerHTML = html || ''; el.hidden = !html; }
+  // Status line and hint remember how they were made, so a language switch can redraw them
+  let statusFn = null, hintFn = null;
+  const status = (fn) => { statusFn = typeof fn === 'function' ? fn : null; $('statusLine').textContent = statusFn ? statusFn() : (fn || ''); };
+  function hint(html) { const el = $('hint'); el.innerHTML = html || ''; el.hidden = !html; if (!html) hintFn = null; }
+  function hintBy(fn) { hint(fn()); hintFn = fn; }
 
   async function getJson(url) {
     const r = await fetch(url);
@@ -314,7 +319,7 @@
     $('lyrFields').addEventListener('change', (e) => setFieldsVisible(e.target.checked));
     $('lyrContours').addEventListener('change', (e) => { setLayerVisible('contours', e.target.checked); setLayerVisible('contour-labels', e.target.checked); });
     $('lyrZones').addEventListener('change', () => updateZonesVisibility());
-    if (!contourUrl) { $('lyrContours').disabled = true; $('lyrContours').closest('label').title = 'Contours unavailable'; }
+    if (!contourUrl) { $('lyrContours').disabled = true; $('lyrContours').closest('label').title = t('layers.contoursOff'); }
     // Rivers, canals and lakes on/off
     $('lyrWater').addEventListener('change', (e) => ['water-fill', 'water-shore', 'waterway-edge', 'waterway', 'waterway-center'].forEach((l) => setLayerVisible(l, e.target.checked)));
     // Panel open/close is handled by ui.js (one click, remembered, one sheet at a time on phones)
@@ -342,36 +347,36 @@
   }
 
   async function startLocation() {
-    status('Finding your location…');
+    status(() => t('status.finding'));
     try {
       const d = await getJson('/api/location');
       flyTo(d.lon, d.lat, 12.5);
-      status(`Located by IP: ${[d.city, d.country].filter(Boolean).join(', ')} · approximate, search to refine`);
+      status(() => t('status.byIp', { place: [d.city, d.country].filter(Boolean).join(', ') }));
       return;
     } catch (_) { /* fall back to browser geolocation */ }
     try {
       const p = await browserLocation();
       flyTo(p.lon, p.lat, 14);
-      status('Located by device GPS');
+      status(() => t('status.byGps'));
       return;
     } catch (_) { /* fall back to search */ }
-    status('Showing Dushanbe. Search for your village to move the map.');
+    status(() => t('status.dushanbe'));
     $('searchInput').focus();
   }
 
   async function myLocation() {
-    status('Finding your location…');
+    status(() => t('status.finding'));
     try {
       const p = await browserLocation();
       flyTo(p.lon, p.lat, 15);
-      status('Located by device GPS');
+      status(() => t('status.byGps'));
     } catch (_) {
       try {
         const d = await getJson('/api/location');
         flyTo(d.lon, d.lat, 12.5);
-        status(`Device location unavailable; using IP location: ${d.city || ''}`);
+        status(() => t('status.ipFallback', { place: d.city || '' }));
       } catch (__) {
-        status('Location unavailable. Use the search box.');
+        status(() => t('status.noLocation'));
       }
     }
   }
@@ -379,11 +384,11 @@
   async function doSearch(q) {
     const list = $('searchResults');
     if (!q.trim()) { list.hidden = true; return; }
-    list.innerHTML = '<li class="empty">Searching…</li>';
+    list.innerHTML = `<li class="empty">${esc(t('search.searching'))}</li>`;
     list.hidden = false;
     try {
       const { results } = await getJson(`/api/geocode?q=${encodeURIComponent(q)}`);
-      if (!results.length) { list.innerHTML = '<li class="empty">No places found</li>'; return; }
+      if (!results.length) { list.innerHTML = `<li class="empty">${esc(t('search.none'))}</li>`; return; }
       list.innerHTML = '';
       results.forEach((r) => {
         const li = document.createElement('li');
@@ -400,7 +405,7 @@
         list.appendChild(li);
       });
     } catch (_) {
-      list.innerHTML = '<li class="empty">Search is unavailable right now</li>';
+      list.innerHTML = `<li class="empty">${esc(t('search.error'))}</li>`;
     }
   }
 
@@ -418,10 +423,10 @@
 
   // Shape rules checked the moment a field is closed or an edit is committed
   function shapeProblem(feature) {
-    if (window.terraDraw.ValidateNotSelfIntersecting(feature).valid === false) return 'The field edges cross each other. Draw the corners in order around the field.';
+    if (window.terraDraw.ValidateNotSelfIntersecting(feature).valid === false) return t('shape.cross');
     const ha = turf.area(feature) / 10000;
-    if (ha < MIN_FIELD_HA) return `Too small: ${fmt(ha, 3)} ha. A field must be at least ${MIN_FIELD_HA} ha.`;
-    if (ha > MAX_FIELD_HA) return `Too large: ${fmt(ha, 0)} ha. A field can be at most ${MAX_FIELD_HA} ha. Zoom in and draw a smaller field.`;
+    if (ha < MIN_FIELD_HA) return t('shape.small', { ha: fmt(ha, 3), min: fmt(MIN_FIELD_HA, 2) });
+    if (ha > MAX_FIELD_HA) return t('shape.large', { ha: fmt(ha, 0), max: fmt(MAX_FIELD_HA) });
     return null;
   }
 
@@ -556,8 +561,8 @@
   function nextName() {
     let n = fields.size + 1;
     const names = new Set([...fields.values()].map((f) => f.name));
-    while (names.has(`Field ${n}`)) n++;
-    return `Field ${n}`;
+    while (names.has(t('field.name', { num: n }))) n++;
+    return t('field.name', { num: n });
   }
 
   function onFieldDrawn(id) {
@@ -567,7 +572,7 @@
     save();
     setDrawing(false);
     draw.selectFeature(id);
-    toast(`${fields.get(id).name}: ${fmt(fields.get(id).geo.areaHa, 2)} ha · checking land type…`);
+    toast(t('toast.checking', { name: fields.get(id).name, ha: fmt(fields.get(id).geo.areaHa, 2) }));
     runLandCheck(id, { isNew: true });
   }
 
@@ -581,7 +586,7 @@
       recompute(id);
       save();
       render();
-      toast(`${problem} The change was undone.`, true);
+      toast(`${problem} ${t('toast.undone')}`, true);
       return;
     }
     runLandCheck(id, { prevGeometry: field.lastGood });
@@ -627,9 +632,9 @@
         await removeField(id, { quiet: true });
         showBlocked(rep.pieces, null);
         const again = await window.FSDialog.confirm({
-          title: 'Field not allowed here',
-          message: `${msg} (${pct}% of the field is on blocked land, the limit is 5%.)`,
-          okText: 'Draw again', cancelText: 'Close',
+          title: t('dlg.notAllowed'),
+          message: `${msg} ${t('dlg.notAllowedPct', { pct })}`,
+          okText: t('dlg.drawAgain'), cancelText: t('dlg.close'),
         });
         if (again) setDrawing(true);
         return;
@@ -641,7 +646,7 @@
         recompute(id);
         save();
         render();
-        toast(`${msg} The change was undone.`, true);
+        toast(`${msg} ${t('toast.undone')}`, true);
         return;
       }
       // Imported / restored field: keep it but flag it clearly
@@ -653,17 +658,17 @@
       landParts.set(id, rep);
       showBlocked(rep.pieces, id);
       field.lastGood = f.geometry;
-      toast(`${field.name} touches ${window.FieldLand.rejectMessage(rep).replace(/^This field overlaps |\. Move it onto farmland\.$/g, '')} (${pct}%). You can trim it in the Field overview.`);
+      toast(t('toast.touches', { name: field.name, what: window.FieldLand.whatList(rep), pct }));
     } else if (rep.status === 'ok') {
       field.land = landSummary(rep);
       landParts.delete(id);
       clearBlocked(id);
       field.lastGood = f.geometry;
-      if (isNew) toast(`${field.name} saved: ${fmt(field.geo.areaHa, 2)} ha on allowed land`);
+      if (isNew) toast(t('toast.saved', { name: field.name, ha: fmt(field.geo.areaHa, 2) }));
     } else {
       field.land = { status: 'unverified', checkedAt: new Date().toISOString() };
       field.lastGood = f.geometry;
-      toast('Could not verify land type, check manually.', true);
+      toast(t('land.unverifiedToast'), true);
     }
     save();
     render();
@@ -674,14 +679,14 @@
     const f = featureOf(id);
     if (!rep || !rep.union || !f) return;
     const geom = window.FieldLand.trim(f, rep.union);
-    const problem = geom ? shapeProblem({ type: 'Feature', properties: {}, geometry: geom }) : 'Nothing would be left after trimming.';
-    if (problem) { toast(`Can't trim: ${problem}`, true); return; }
+    const problem = geom ? shapeProblem({ type: 'Feature', properties: {}, geometry: geom }) : t('toast.trimNothing');
+    if (problem) { toast(t('toast.cantTrim', { problem }), true); return; }
     const before = fields.get(id).geo.areaHa;
     draw.updateFeatureGeometry(id, geom);
     recompute(id);
     clearBlocked(id);
     const after = fields.get(id).geo.areaHa;
-    toast(`Trimmed ${fmt(before - after, 2)} ha of blocked land. Re-checking…`);
+    toast(t('toast.trimmed', { ha: fmt(before - after, 2) }));
     runLandCheck(id);
   }
 
@@ -718,33 +723,33 @@
     if (!id || !fields.has(id)) return;
     const name = fields.get(id).name;
     const ok = await window.FSDialog.confirm({
-      title: 'Delete this field?',
-      message: `"${name}" will be removed from the map and from this browser. Export first if you want a backup.`,
-      okText: 'Delete', cancelText: 'Keep', danger: true,
+      title: t('dlg.deleteOne'),
+      message: t('dlg.deleteOneMsg', { name }),
+      okText: t('dlg.delete'), cancelText: t('dlg.keep'), danger: true,
     });
     if (!ok || !fields.has(id)) return;
     await removeField(id);
-    toast(`${name} deleted`);
+    toast(t('toast.deleted', { name }));
   }
 
   async function deleteAllFields() {
     const n = fields.size;
     if (!n) return;
     const ok = await window.FSDialog.confirm({
-      title: `Delete all ${n} field${n > 1 ? 's' : ''}?`,
-      message: 'Every field will be removed from the map and from this browser. This cannot be undone.',
-      okText: 'Delete all', cancelText: 'Keep', danger: true,
+      title: t('dlg.deleteAll', { n }),
+      message: t('dlg.deleteAllMsg'),
+      okText: t('dlg.deleteAllOk'), cancelText: t('dlg.keep'), danger: true,
     });
     if (!ok) return;
     for (const id of [...fields.keys()]) await removeField(id);
     clearBlocked();
-    toast(`Deleted ${n} field${n > 1 ? 's' : ''}`);
+    toast(t('toast.deletedN', { n }));
   }
 
   async function renameField(id) {
     const field = fields.get(id);
     if (!field) return;
-    const v = await window.FSDialog.prompt({ title: 'Rename field', value: field.name, okText: 'Save' });
+    const v = await window.FSDialog.prompt({ title: t('dlg.rename'), value: field.name, okText: t('dlg.save'), cancelText: t('dlg.cancel') });
     if (!v || !fields.has(id)) return;
     field.name = v.slice(0, 60);
     updateLabel(id);
@@ -784,7 +789,7 @@
       labels.set(id, m);
     }
     m.setLngLat(field.geo.centroid);
-    window.FSStyles.updatePin(m.getElement(), { title: field.name, sub: `${fmt(field.geo.areaHa, field.geo.areaHa < 10 ? 2 : 1)} ha` });
+    window.FSStyles.updatePin(m.getElement(), { title: field.name, sub: `${fmt(field.geo.areaHa, field.geo.areaHa < 10 ? 2 : 1)} ${t('unit.ha')}` });
   }
 
   // ── No-draw zones + live feedback while drawing ──
@@ -808,8 +813,8 @@
   }
 
   function drawingHint(needZoom) {
-    hint('Click on the terrain to add corners · click the first point to close the field · <kbd>Esc</kbd> to cancel' +
-      (needZoom ? '<br><span class="hint-sub">Zoom in closer to see red no-draw zones (water, villages, roads)</span>' : ''));
+    hintBy(() => esc(t('hint.draw')).replace('{esc}', '<kbd>Esc</kbd>') +
+      (needZoom ? `<br><span class="hint-sub">${esc(t('hint.zoomZones'))}</span>` : ''));
   }
 
   function updateCursorTip(e) {
@@ -818,8 +823,8 @@
     const r = map.getZoom() >= window.FieldLand.MIN_ZONE_ZOOM ? window.FieldLand.hitTest(e.lngLat) : { state: 'unknown' };
     live.state = r.state; live.cls = r.cls;
     tip.className = `cursor-tip ${r.state}`;
-    tip.textContent = r.state === 'blocked' ? `✕ No-draw: ${window.FieldLand.SHORT[r.cls] || r.cls}`
-      : r.state === 'allowed' ? '✓ Allowed land' : 'Land type not loaded';
+    tip.textContent = r.state === 'blocked' ? `✕ ${t('tip.noDraw', { what: window.FieldLand.shortName(r.cls) })}`
+      : r.state === 'allowed' ? `✓ ${t('tip.allowed')}` : t('tip.unknown');
     tip.style.transform = `translate(${e.point.x + 16}px, ${e.point.y + 16}px)`;
     tip.hidden = false;
     map.getCanvas().style.cursor = r.state === 'blocked' ? 'not-allowed' : 'crosshair';
@@ -841,18 +846,16 @@
     }
     updateZonesVisibility();
     $('drawBtn').classList.toggle('active', on);
-    $('drawBtn').querySelector('span').textContent = on ? 'Cancel drawing' : 'Draw my field';
+    drawBtnText(on);
     $('editBtn').classList.remove('active');
   }
 
   function startEdit() {
-    if (!fields.size) { toast('Draw a field first.'); return; }
+    if (!fields.size) { toast(t('toast.drawFirst')); return; }
     setDrawing(false);
     if (!selectedId && fields.size === 1) selectField(fields.keys().next().value, false);
     $('editBtn').classList.add('active');
-    hint(selectedId
-      ? 'Drag a corner to reshape · drag a midpoint to add a corner · right-click a corner to remove it · drag inside to move'
-      : 'Click a field on the map (or in the list) to edit it');
+    startEditHintOnly();
   }
 
   // ─── Storage, export, import ───────────────────────────────────────────────
@@ -890,7 +893,7 @@
     const gj = toGeoJSON(false);
     updateGlow(gj);
     try { localStorage.setItem(STORE_KEY, JSON.stringify(gj)); }
-    catch (_) { toast('Could not save to this browser (storage blocked). Use Export to keep your fields.', true); }
+    catch (_) { toast(t('toast.storage'), true); }
   }
 
   // Lime glow around every field (fed from the same snapshot that is saved)
@@ -982,7 +985,7 @@
     if (!raw) return;
     try {
       const { added } = addPolygons(extractPolygons(JSON.parse(raw)), { fromStorage: true });
-      if (added) toast(`Loaded ${added} saved field${added > 1 ? 's' : ''}`);
+      if (added) toast(t('toast.loaded', { n: added }));
     } catch (err) { console.warn('[storage]', err); }
   }
 
@@ -1003,7 +1006,7 @@
   }
 
   async function exportFields() {
-    if (!fields.size) { toast('No fields to export yet.'); return; }
+    if (!fields.size) { toast(t('toast.noExport')); return; }
     const gj = toGeoJSON(true);
     const header = await exportHeader();
     const blob = new Blob([JSON.stringify({ type: gj.type, ...header, features: gj.features }, null, 2)], { type: 'application/geo+json' });
@@ -1014,17 +1017,17 @@
     a.click();
     a.remove();
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
-    toast(`Exported ${fields.size} field${fields.size > 1 ? 's' : ''}`);
+    toast(t('toast.exported', { n: fields.size }));
   }
 
   function importFile(file) {
     if (!file) return;
-    if (file.size > 10 * 1024 * 1024) { toast('That file is too large (max 10 MB).', true); return; }
+    if (file.size > 10 * 1024 * 1024) { toast(t('toast.tooBig'), true); return; }
     const reader = new FileReader();
     reader.onload = () => {
       try {
         const polys = extractPolygons(JSON.parse(reader.result));
-        if (!polys.length) { toast('No polygons found in that file.', true); return; }
+        if (!polys.length) { toast(t('toast.noPolys'), true); return; }
         setDrawing(false);
         const { added, rejected, addedIds } = addPolygons(polys);
         save();
@@ -1034,9 +1037,9 @@
           const b = turf.bbox(all);
           map.fitBounds([[b[0], b[1]], [b[2], b[3]]], { padding: 80, maxZoom: 16, duration: 1200 });
         }
-        toast(`Imported ${added} field${added === 1 ? '' : 's'}${rejected ? ` · ${rejected} skipped (crossing edges, or outside ${MIN_FIELD_HA}–${MAX_FIELD_HA} ha)` : ''}`, !added);
+        toast(t('toast.imported', { n: added }) + (rejected ? ` · ${t('toast.skipped', { n: rejected, min: fmt(MIN_FIELD_HA, 2), max: fmt(MAX_FIELD_HA) })}` : ''), !added);
       } catch (_) {
-        toast('Could not read that file. Is it valid GeoJSON?', true);
+        toast(t('toast.badFile'), true);
       }
     };
     reader.readAsText(file);
@@ -1048,48 +1051,49 @@
       `<g transform="rotate(${deg} 22 22)"><path d="M22 8 L27 24 L22 21 L17 24 Z" fill="${FIELD_COLOR}"/></g>`;
     return `<svg class="compass" viewBox="0 0 44 44" aria-hidden="true">
       <circle cx="22" cy="22" r="19" fill="rgba(255,255,255,0.04)" stroke="rgba(150,170,255,0.35)"/>
-      <text x="22" y="9" text-anchor="middle" font-size="7" fill="#a8b2d4" font-family="Inter">N</text>
+      <text x="22" y="9" text-anchor="middle" font-size="7" fill="#a8b2d4" font-family="Inter">${esc(t('ov.compassN'))}</text>
       ${arrow}${deg == null ? '<circle cx="22" cy="22" r="3" fill="#a8b2d4"/>' : ''}
     </svg>`;
   }
 
   function metric(k, v, sub, wide) {
-    return `<div class="metric${wide ? ' wide' : ''}"><div class="k">${k}</div><div class="v${v == null ? ' loading' : ''}">${v == null ? 'Analyzing terrain…' : v}</div>${sub ? `<div class="sub">${sub}</div>` : ''}</div>`;
+    return `<div class="metric${wide ? ' wide' : ''}"><div class="k">${k}</div><div class="v${v == null ? ' loading' : ''}">${v == null ? esc(t('ov.analyzing')) : v}</div>${sub ? `<div class="sub">${sub}</div>` : ''}</div>`;
   }
 
   const LAND_BADGE = {
-    ok: { cls: 'ok', icon: '✓', text: 'Allowed land' },
-    minor: { cls: 'minor', icon: '!', text: 'Small overlap' },
-    blocked: { cls: 'blocked', icon: '✕', text: 'On blocked land' },
-    unverified: { cls: 'unverified', icon: '⚠', text: 'Not verified' },
-    checking: { cls: 'checking', icon: '…', text: 'Checking land' },
+    ok: { cls: 'ok', icon: '✓' },
+    minor: { cls: 'minor', icon: '!' },
+    blocked: { cls: 'blocked', icon: '✕' },
+    unverified: { cls: 'unverified', icon: '⚠' },
+    checking: { cls: 'checking', icon: '…' },
   };
   function landBadge(land, compact) {
-    const b = LAND_BADGE[(land && land.status) || 'unverified'];
+    const st = (land && land.status) || 'unverified';
+    const b = { ...LAND_BADGE[st], text: t('land.badge.' + st) };
     return `<span class="land-badge ${b.cls}" title="${esc(b.text)}">${b.icon}${compact ? '' : ` ${esc(b.text)}`}</span>`;
   }
 
   function landHtml(id, field) {
     const land = field.land || { status: 'unverified' };
-    const S = window.FieldLand.SHORT;
+    const S = window.FieldLand.shortName;
     let detail = '';
     if (land.status === 'ok') {
       detail = land.allowedClasses && land.allowedClasses.length
-        ? `No water, settlements or roads. Mapped as ${land.allowedClasses.map((c) => S[c] || c).join(', ').toLowerCase()} (${fmt(land.allowedShare * 100)}% of the field).`
-        : 'No water, settlements or roads mapped here.';
+        ? t('land.okMapped', { types: land.allowedClasses.map((c) => S(c)).join(', ').toLowerCase(), pct: fmt(land.allowedShare * 100) })
+        : t('land.okNone');
     } else if (land.status === 'minor' || land.status === 'blocked') {
-      detail = `${fmt(land.share * 100, 1)}% overlaps ${land.classes.map((c) => (S[c] || c).toLowerCase()).join(', ')}.`;
+      detail = t('land.overlaps', { pct: fmt(land.share * 100, 1), types: land.classes.map((c) => S(c).toLowerCase()).join(', ') });
     } else if (land.status === 'unverified') {
-      detail = 'Could not verify land type, check manually. (OpenStreetMap service unavailable.)';
-    } else detail = 'Checking OpenStreetMap…';
+      detail = t('land.unverified');
+    } else detail = t('land.checkingOsm');
     const canTrim = (land.status === 'minor' || land.status === 'blocked') && landParts.has(id);
     const canRetry = land.status === 'unverified';
     return `<div class="metric wide land-row ${LAND_BADGE[land.status] ? LAND_BADGE[land.status].cls : ''}">
-        <div class="k">Can this land be farmed?</div>
+        <div class="k">${esc(t('land.question'))}</div>
         <div class="land-line">${landBadge(land)}</div>
         <div class="sub">${esc(detail)}</div>
-        ${canTrim ? '<button class="btn-sm trim-btn" id="trimBtn" type="button">Trim the field automatically</button>' : ''}
-        ${canRetry ? '<button class="btn-sm" id="recheckBtn" type="button">Check again</button>' : ''}
+        ${canTrim ? `<button class="btn-sm trim-btn" id="trimBtn" type="button">${esc(t('land.trim'))}</button>` : ''}
+        ${canRetry ? `<button class="btn-sm" id="recheckBtn" type="button">${esc(t('land.recheck'))}</button>` : ''}
       </div>`;
   }
 
@@ -1098,46 +1102,47 @@
     const field = selectedId && fields.get(selectedId);
     if (!field) {
       el.innerHTML = fields.size
-        ? '<p class="empty-state">Select a field on the map or in the list below to see its overview.</p>'
-        : `<div class="empty-state"><b>Map your first field</b><ol>
-             <li>Find your land: search for your village or use <i>Go to my location</i>.</li>
-             <li>Press <b>Draw my field</b> and click each corner on the terrain.</li>
-             <li>Click the first corner again to close the field.</li></ol></div>`;
+        ? `<p class="empty-state">${esc(t('ov.selectHint'))}</p>`
+        : `<div class="empty-state"><b>${esc(t('ov.firstTitle'))}</b><ol>
+             <li>${esc(t('ov.first1'))}</li>
+             <li>${esc(t('ov.first2'))}</li>
+             <li>${esc(t('ov.first3'))}</li></ol></div>`;
       return;
     }
     const g = field.geo || {};
-    const t = field.terrain;
+    const tr = field.terrain;
+    const k = (key) => esc(t(key));
     let terrainHtml;
     if (field.terrainError) {
-      terrainHtml = '<div class="metric wide"><div class="k">Terrain</div><div class="sub">Elevation data could not be loaded. Check your connection and edit the field to retry.</div></div>';
-    } else if (!t) {
-      terrainHtml = metric('Height above sea', null) + metric('Average slope', null) + metric('Slope faces', null, null, true);
+      terrainHtml = `<div class="metric wide"><div class="k">${k('ov.terrain')}</div><div class="sub">${k('ov.terrainErr')}</div></div>`;
+    } else if (!tr) {
+      terrainHtml = metric(k('ov.height'), null) + metric(k('ov.avgSlope'), null) + metric(k('ov.faces'), null, null, true);
     } else {
-      const bars = t.slopeShare.map((s, i) => s > 0 ? `<span style="flex:${s};background:${SLOPE_CLASSES[i].color}" title="${SLOPE_CLASSES[i].label}: ${fmt(s * 100)}%"></span>` : '').join('');
-      const legend = t.slopeShare.map((s, i) => s >= 0.005 ? `<span><i style="background:${SLOPE_CLASSES[i].color}"></i>${SLOPE_CLASSES[i].label} ${fmt(s * 100)}%</span>` : '').join('');
-      const aspectSub = t.aspect === 'flat' ? 'Too flat to face a direction' : t.aspect === 'mixed' ? 'Slopes face several directions' : `Slope faces ${fmt(t.aspectDeg)}° from north`;
+      const bars = tr.slopeShare.map((s, i) => s > 0 ? `<span style="flex:${s};background:${SLOPE_CLASSES[i].color}" title="${esc(slopeLabel(i))}: ${fmt(s * 100)}%"></span>` : '').join('');
+      const legend = tr.slopeShare.map((s, i) => s >= 0.005 ? `<span><i style="background:${SLOPE_CLASSES[i].color}"></i>${esc(slopeLabel(i))} ${fmt(s * 100)}%</span>` : '').join('');
+      const aspectSub = tr.aspect === 'flat' ? t('ov.aspectFlat') : tr.aspect === 'mixed' ? t('ov.aspectMixed') : t('ov.aspectDeg', { deg: fmt(tr.aspectDeg) });
       terrainHtml =
-        metric('Height above sea', `${fmt(t.meanElevation)}<small>m</small>`, `From ${fmt(t.minElevation)} to ${fmt(t.maxElevation)} m`) +
-        metric('Average slope', `${fmt(t.meanSlope, 1)}<small>°</small>`, `${fmt(Math.tan((t.meanSlope * Math.PI) / 180) * 100, 1)}% grade`) +
-        `<div class="metric wide"><div class="k">How steep the field is</div><div class="slope-bar">${bars}</div><div class="slope-legend">${legend}</div></div>` +
-        `<div class="metric wide"><div class="k">Slope faces</div><div class="aspect-wrap">${compassSvg(t.aspectDeg)}<div><div class="v">${ASPECT_NAMES[t.aspect]}</div><div class="sub">${aspectSub}</div></div></div></div>`;
+        metric(k('ov.height'), `${fmt(tr.meanElevation)}<small>${k('unit.m')}</small>`, esc(t('ov.heightRange', { min: fmt(tr.minElevation), max: fmt(tr.maxElevation) }))) +
+        metric(k('ov.avgSlope'), `${fmt(tr.meanSlope, 1)}<small>°</small>`, esc(t('ov.grade', { pct: fmt(Math.tan((tr.meanSlope * Math.PI) / 180) * 100, 1) }))) +
+        `<div class="metric wide"><div class="k">${k('ov.steepness')}</div><div class="slope-bar">${bars}</div><div class="slope-legend">${legend}</div></div>` +
+        `<div class="metric wide"><div class="k">${k('ov.faces')}</div><div class="aspect-wrap">${compassSvg(tr.aspectDeg)}<div><div class="v">${esc(aspectName(tr.aspect))}</div><div class="sub">${esc(aspectSub)}</div></div></div></div>`;
     }
     el.innerHTML = `
-      <div class="detail-head"><span class="swatch"></span><input class="name-input" id="nameInput" value="${esc(field.name)}" maxlength="60" aria-label="Field name" /></div>
+      <div class="detail-head"><span class="swatch"></span><input class="name-input" id="nameInput" value="${esc(field.name)}" maxlength="60" aria-label="${k('ov.nameAria')}" /></div>
       <div class="metrics">
         ${window.FieldClimate ? window.FieldClimate.badgesHtml(selectedId) : ''}
         ${window.FieldAdvisor ? window.FieldAdvisor.html(selectedId, field) : ''}
         ${landHtml(selectedId, field)}
-        ${metric('Area', `${fmt(g.areaHa, g.areaHa < 10 ? 2 : 1)}<small>ha</small>`, `${fmt(g.areaHa * 2.47105, 1)} acres`)}
-        ${metric('Perimeter', `${fmt(g.perimeterKm < 1 ? g.perimeterKm * 1000 : g.perimeterKm, g.perimeterKm < 1 ? 0 : 2)}<small>${g.perimeterKm < 1 ? 'm' : 'km'}</small>`)}
-        ${metric('Location', g.centroid ? `${fmt(g.centroid[1], 5)}, ${fmt(g.centroid[0], 5)}` : '–', 'Latitude, longitude', true)}
+        ${metric(k('ov.area'), `${fmt(g.areaHa, g.areaHa < 10 ? 2 : 1)}<small>${k('unit.ha')}</small>`, esc(t('ov.acres', { v: fmt(g.areaHa * 2.47105, 1) })))}
+        ${metric(k('ov.perimeter'), `${fmt(g.perimeterKm < 1 ? g.perimeterKm * 1000 : g.perimeterKm, g.perimeterKm < 1 ? 0 : 2)}<small>${k(g.perimeterKm < 1 ? 'unit.m' : 'unit.km')}</small>`)}
+        ${metric(k('ov.location'), g.centroid ? `${fmt(g.centroid[1], 5)}; ${fmt(g.centroid[0], 5)}` : '–', k('ov.latlon'), true)}
         ${terrainHtml}
       </div>
-      ${t ? `<p class="note">From Terrarium DEM (≈30 m source), ${fmt(t.samples)} samples at ${fmt(t.resolutionM, 1)} m spacing.</p>` : ''}
+      ${tr ? `<p class="note">${esc(t('ov.demNote', { samples: fmt(tr.samples), res: fmt(tr.resolutionM, 1) }))}</p>` : ''}
       <div class="detail-actions">
-        <button class="btn-sm" id="zoomBtn" type="button">Zoom to</button>
-        <button class="btn-sm" id="editShapeBtn" type="button">Edit shape</button>
-        <button class="btn-sm danger" id="delFieldBtn" type="button">Delete</button>
+        <button class="btn-sm" id="zoomBtn" type="button">${k('ov.zoomTo')}</button>
+        <button class="btn-sm" id="editShapeBtn" type="button">${k('ov.editShape')}</button>
+        <button class="btn-sm danger" id="delFieldBtn" type="button">${k('ov.delete')}</button>
       </div>`;
     const input = $('nameInput');
     input.addEventListener('change', () => {
@@ -1168,14 +1173,14 @@
       li.className = id === selectedId ? 'active' : '';
       li.dataset.id = id;
       li.innerHTML = `
-        <button type="button" class="fl-select" title="Select and zoom to this field">
+        <button type="button" class="fl-select" title="${esc(t('list.selectTip'))}">
           <span class="swatch"></span><span class="fl-name">${esc(f.name)}</span>${landBadge(f.land, true)}
-          <span class="fl-area">${f.geo ? fmt(f.geo.areaHa, 2) + ' ha' : ''}</span>
+          <span class="fl-area">${f.geo ? fmt(f.geo.areaHa, 2) + ' ' + esc(t('unit.ha')) : ''}</span>
         </button>
-        <button type="button" class="fl-act" data-act="rename" title="Rename" aria-label="Rename ${esc(f.name)}">
+        <button type="button" class="fl-act" data-act="rename" title="${esc(t('list.rename'))}" aria-label="${esc(t('list.renameAria', { name: f.name }))}">
           <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
         </button>
-        <button type="button" class="fl-act danger" data-act="delete" title="Delete" aria-label="Delete ${esc(f.name)}">
+        <button type="button" class="fl-act danger" data-act="delete" title="${esc(t('list.delete'))}" aria-label="${esc(t('list.deleteAria', { name: f.name }))}">
           <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
         </button>`;
       li.querySelector('.fl-select').addEventListener('click', () => selectField(id));
@@ -1201,10 +1206,17 @@
     if ($('editBtn').classList.contains('active')) startEditHintOnly();
   }
   function startEditHintOnly() {
-    hint(selectedId
-      ? 'Drag a corner to reshape · drag a midpoint to add a corner · right-click a corner to remove it · drag inside to move'
-      : 'Click a field on the map (or in the list) to edit it');
+    hintBy(() => esc(t(selectedId ? 'hint.edit' : 'hint.pickToEdit')));
   }
+  function drawBtnText(on) { $('drawBtn').querySelector('span').textContent = t(on ? 'tool.cancelDraw' : 'tool.draw'); }
+  // Language switch: redraw every text this module wrote (fields, selection and map position stay)
+  I18N.onChange(() => {
+    drawBtnText(isDrawing());
+    if (statusFn) status(statusFn);
+    if (hintFn) hintBy(hintFn);
+    labels.forEach((_, id) => updateLabel(id));
+    render();
+  });
 
   // ─── Toolbar & keys ────────────────────────────────────────────────────────
   function bindToolbar() {
@@ -1289,7 +1301,7 @@
       const all = turf.featureCollection([...fields.keys()].map(featureOf).filter(Boolean));
       const b = turf.bbox(all);
       map.fitBounds([[b[0], b[1]], [b[2], b[3]]], { padding: 120, maxZoom: 15, pitch: PITCH_3D, duration: 1500 });
-      status('Showing your saved fields');
+      status(() => t('status.saved'));
     } else {
       startLocation();
     }

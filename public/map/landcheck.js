@@ -10,19 +10,11 @@
   const CELL = 0.05;            // no-draw zone tiles, degrees
   const MIN_ZONE_ZOOM = 12;
 
-  const LABELS = {
-    river: 'a river', canal: 'a canal', water: 'a lake or reservoir', wetland: 'a wetland',
-    settlement: 'a village or town', built: 'a built-up area', cemetery: 'a cemetery',
-    airport: 'an airport', building: 'buildings', road: 'a road',
-  };
-  const SHORT = {
-    river: 'River', canal: 'Canal', water: 'Water', wetland: 'Wetland', settlement: 'Village / town',
-    built: 'Built-up area', cemetery: 'Cemetery', airport: 'Airport', building: 'Building', road: 'Road',
-    farmland: 'Farmland', farmyard: 'Farmyard', orchard: 'Orchard', vineyard: 'Vineyard', meadow: 'Meadow',
-    grass: 'Grass', scrub: 'Scrub', grassland: 'Grassland', bare_rock: 'Bare rock', scree: 'Scree', heath: 'Heath',
-  };
-
-  const joinList = (arr) => (arr.length <= 1 ? arr.join('') : `${arr.slice(0, -1).join(', ')} and ${arr[arr.length - 1]}`);
+  // Land type names come from the language files: land.long.<cls> (in a sentence) and land.short.<cls> (a label)
+  const tr = (key, fallback) => (window.FSi18n && window.FSi18n.has(key) ? window.FSi18n.t(key) : fallback);
+  const longName = (c) => tr('land.long.' + c, c);
+  const shortName = (c) => tr('land.short.' + c, c);
+  const joinList = (arr) => window.FSi18n.list(arr);
 
   // Roads and rivers come as centre lines: turn them into polygons of their real width
   function toAreas(features) {
@@ -95,9 +87,9 @@
     };
   }
 
+  const whatList = (report) => joinList(report.classes.map(longName)) || window.FSi18n.t('land.notAllowedLand');
   function rejectMessage(report) {
-    const what = joinList(report.classes.map((c) => LABELS[c] || c));
-    return `This field overlaps ${what || 'land where farming is not allowed'}. Move it onto farmland.`;
+    return window.FSi18n.t('land.reject', { what: whatList(report) });
   }
 
   // Cut the blocked parts out; keep the largest remaining piece
@@ -195,7 +187,7 @@
   }
 
   window.FieldLand = {
-    BLOCK_THRESHOLD, MIN_ZONE_ZOOM, LABELS, SHORT,
+    BLOCK_THRESHOLD, MIN_ZONE_ZOOM, longName, shortName, whatList,
     checkField, rejectMessage, trim, ensureZones, zonesGeoJSON, hitTest,
   };
 })();

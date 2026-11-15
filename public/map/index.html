@@ -8,15 +8,17 @@
   <link rel="icon" type="image/svg+xml" href="/img/abf-mark.svg" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet" />
+  <!-- Inter: full Cyrillic incl. cyrillic-ext (Tajik ғ ӣ қ ӯ ҳ ҷ). Space Grotesk (Latin only) is for the logo text only. -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.css" />
   <link rel="stylesheet" href="map.css" />
   <link rel="stylesheet" href="climate.css" />
   <link rel="stylesheet" href="ui.css" />
+  <script src="i18n.js"></script>
 </head>
 <body>
-  <div id="map" role="application" aria-label="3D terrain map"></div>
+  <div id="map" role="application" data-i18n-attr="aria-label:app.mapAria"></div>
 
   <!-- Loading screen: large mark, orbit ring turns slowly until the map is ready -->
   <div class="loader" id="loader" role="status" aria-live="polite">
@@ -34,23 +36,28 @@
       </g>
     </svg>
     <div class="loader-text"><span class="abf-word">ABF</span> <span class="abf-tag">Field Shift</span></div>
-    <p class="loader-sub">Loading terrain and satellite data…</p>
+    <p class="loader-sub" data-i18n="app.loading"></p>
   </div>
 
-  <!-- Top bar: brand + search -->
+  <!-- Top bar: brand + search + language -->
   <header class="topbar">
-    <button class="brand" id="brandBtn" type="button" title="Re-center on my location" aria-label="ABF Field Shift: re-center the map on my location">
+    <button class="brand" id="brandBtn" type="button" data-i18n-attr="title:top.recenter,aria-label:top.brandAria">
       <img src="/img/abf-mark.svg" alt="" class="brand-mark" width="36" height="36" />
       <span class="abf-word">ABF</span>
       <span class="abf-tag">Field Shift</span>
     </button>
     <form class="search" id="searchForm" autocomplete="off">
       <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="2"/><path d="M20 20l-4-4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-      <input id="searchInput" type="search" placeholder="Search a place…" aria-label="Search a place" />
+      <input id="searchInput" type="search" data-i18n-attr="placeholder:top.searchPh,aria-label:top.searchAria" />
       <ul id="searchResults" class="search-results" hidden></ul>
     </form>
     <div class="status-line" id="statusLine" role="status" aria-live="polite"></div>
-    <button class="icon-btn" id="locateBtn" type="button" title="Go to my location" aria-label="Go to my location">
+    <div class="lang-switch" role="group" data-i18n-attr="aria-label:top.language">
+      <button type="button" data-lang="en" lang="en" title="English">EN</button>
+      <button type="button" data-lang="ru" lang="ru" title="Русский">RU</button>
+      <button type="button" data-lang="tg" lang="tg" title="Тоҷикӣ">TJ</button>
+    </div>
+    <button class="icon-btn" id="locateBtn" type="button" data-i18n-attr="title:top.locate,aria-label:top.locate">
       <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><circle cx="12" cy="12" r="3" fill="currentColor"/><circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 1v3M12 20v3M1 12h3M20 12h3" stroke="currentColor" stroke-width="2"/></svg>
     </button>
   </header>
@@ -58,119 +65,119 @@
   <!-- Layers panel -->
   <aside class="panel layers-panel" id="layersPanel">
     <button class="panel-head" type="button" data-toggle="layersPanel" aria-expanded="true">
-      <span>Map layers</span>
+      <span data-i18n="layers.title"></span>
       <svg class="chev" viewBox="0 0 24 24" width="16" height="16"><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2"/></svg>
     </button>
     <div class="panel-body">
       <section class="lg" aria-labelledby="lgMap">
-        <h4 class="lg-title" id="lgMap">Map</h4>
+        <h4 class="lg-title" id="lgMap" data-i18n="layers.groupMap"></h4>
         <div class="row">
-          <span class="label">View</span>
-          <div class="seg" role="group" aria-label="Flat map or 3D view">
+          <span class="label" data-i18n="layers.view"></span>
+          <div class="seg" role="group" data-i18n-attr="aria-label:layers.viewAria">
             <button type="button" id="view2d">2D</button>
             <button type="button" id="view3d" class="on">3D</button>
           </div>
         </div>
         <label class="row slider-row" for="exaggeration">
-          <span class="label">Mountain height</span>
+          <span class="label" data-i18n="layers.height"></span>
           <span class="mono" id="exagValue">1.5×</span>
           <input type="range" id="exaggeration" min="1" max="3" step="0.1" value="1.5" />
         </label>
         <label class="row slider-row" for="colorIntensity">
-          <span class="label">Color strength</span>
+          <span class="label" data-i18n="layers.color"></span>
           <span class="mono" id="colorValue">1.0×</span>
           <input type="range" id="colorIntensity" min="0.5" max="1.5" step="0.1" value="1" />
         </label>
-        <label class="toggle"><input type="checkbox" id="lyrSatellite" /><span class="sw"></span>Satellite photo</label>
-        <label class="toggle"><input type="checkbox" id="lyrHillshade" checked /><span class="sw"></span>Shadows on hills</label>
-        <label class="toggle"><input type="checkbox" id="lyrSlope" checked /><span class="sw"></span>Darker steep slopes</label>
-        <label class="toggle"><input type="checkbox" id="lyrRelief" checked /><span class="sw"></span>Colors by height</label>
-        <label class="toggle"><input type="checkbox" id="lyrContours" /><span class="sw"></span>Height lines (every 100 m)</label>
-        <label class="toggle"><input type="checkbox" id="lyrLabels" checked /><span class="sw"></span>Place names</label>
+        <label class="toggle"><input type="checkbox" id="lyrSatellite" /><span class="sw"></span><span data-i18n="layers.satellite"></span></label>
+        <label class="toggle"><input type="checkbox" id="lyrHillshade" checked /><span class="sw"></span><span data-i18n="layers.hillshade"></span></label>
+        <label class="toggle"><input type="checkbox" id="lyrSlope" checked /><span class="sw"></span><span data-i18n="layers.slope"></span></label>
+        <label class="toggle"><input type="checkbox" id="lyrRelief" checked /><span class="sw"></span><span data-i18n="layers.relief"></span></label>
+        <label class="toggle"><input type="checkbox" id="lyrContours" /><span class="sw"></span><span data-i18n="layers.contours"></span></label>
+        <label class="toggle"><input type="checkbox" id="lyrLabels" checked /><span class="sw"></span><span data-i18n="layers.labels"></span></label>
       </section>
       <section class="lg" aria-labelledby="lgWater">
-        <h4 class="lg-title" id="lgWater">Water</h4>
-        <label class="toggle"><input type="checkbox" id="lyrWater" checked /><span class="sw"></span>Rivers, canals and lakes</label>
+        <h4 class="lg-title" id="lgWater" data-i18n="layers.groupWater"></h4>
+        <label class="toggle"><input type="checkbox" id="lyrWater" checked /><span class="sw"></span><span data-i18n="layers.water"></span></label>
       </section>
       <section class="lg" aria-labelledby="lgTrees">
-        <h4 class="lg-title" id="lgTrees">Trees</h4>
-        <label class="toggle"><input type="checkbox" id="lyrTrees" checked /><span class="sw"></span>3D trees</label>
+        <h4 class="lg-title" id="lgTrees" data-i18n="layers.groupTrees"></h4>
+        <label class="toggle"><input type="checkbox" id="lyrTrees" checked /><span class="sw"></span><span data-i18n="layers.trees"></span></label>
         <div class="row">
-          <span class="label">Detail</span>
-          <div class="seg" id="plantQuality" role="group" aria-label="Tree detail">
-            <button type="button" data-q="low">Low</button>
-            <button type="button" data-q="medium">Med</button>
-            <button type="button" data-q="high">High</button>
+          <span class="label" data-i18n="layers.detail"></span>
+          <div class="seg" id="plantQuality" role="group" data-i18n-attr="aria-label:layers.detailAria">
+            <button type="button" data-q="low" data-i18n="layers.low"></button>
+            <button type="button" data-q="medium" data-i18n="layers.med"></button>
+            <button type="button" data-q="high" data-i18n="layers.high"></button>
           </div>
         </div>
         <p class="plant-status" id="plantStatus" aria-live="polite"></p>
       </section>
       <section class="lg" aria-labelledby="lgFire">
-        <h4 class="lg-title" id="lgFire">Fire</h4>
-        <label class="toggle"><input type="checkbox" id="lyrFires" checked /><span class="sw"></span>Fires seen by satellite</label>
-        <p class="lg-legend"><i class="dot" style="background:#ff5a1f"></i>VIIRS <i class="dot" style="background:#ffd43b"></i>MODIS · last 10 days</p>
+        <h4 class="lg-title" id="lgFire" data-i18n="layers.groupFire"></h4>
+        <label class="toggle"><input type="checkbox" id="lyrFires" checked /><span class="sw"></span><span data-i18n="layers.fires"></span></label>
+        <p class="lg-legend"><i class="dot" style="background:#ff5a1f"></i>VIIRS <i class="dot" style="background:#ffd43b"></i>MODIS · <span data-i18n="layers.last10"></span></p>
       </section>
       <section class="lg" aria-labelledby="lgFields">
-        <h4 class="lg-title" id="lgFields">My fields</h4>
-        <label class="toggle"><input type="checkbox" id="lyrFields" checked /><span class="sw"></span>Show my fields</label>
-        <label class="toggle"><input type="checkbox" id="lyrZones" /><span class="sw"></span>Places you can't farm</label>
+        <h4 class="lg-title" id="lgFields" data-i18n="layers.groupFields"></h4>
+        <label class="toggle"><input type="checkbox" id="lyrFields" checked /><span class="sw"></span><span data-i18n="layers.fields"></span></label>
+        <label class="toggle"><input type="checkbox" id="lyrZones" /><span class="sw"></span><span data-i18n="layers.zones"></span></label>
       </section>
-      <p class="about-note">Powered by NASA data · Space Apps Challenge 2026</p>
+      <p class="about-note" data-i18n="app.footer"></p>
     </div>
   </aside>
 
   <!-- Field overview panel -->
   <aside class="panel overview-panel" id="overviewPanel">
     <button class="panel-head" type="button" data-toggle="overviewPanel" aria-expanded="true">
-      <span>Field overview <em id="fieldCount" class="count">0</em></span>
+      <span><span data-i18n="ov.title"></span> <em id="fieldCount" class="count">0</em></span>
       <svg class="chev" viewBox="0 0 24 24" width="16" height="16"><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2"/></svg>
     </button>
     <div class="panel-body">
       <div id="fieldDetail"></div>
-      <h4 class="list-title" id="listTitle" hidden>Saved fields</h4>
+      <h4 class="list-title" id="listTitle" hidden data-i18n="ov.saved"></h4>
       <ul id="fieldList" class="field-list"></ul>
-      <button type="button" class="btn-sm danger delete-all" id="deleteAllBtn" hidden>Delete all fields</button>
+      <button type="button" class="btn-sm danger delete-all" id="deleteAllBtn" hidden data-i18n="ov.deleteAll"></button>
     </div>
   </aside>
 
   <!-- Toolbar -->
-  <nav class="toolbar" aria-label="Field tools">
+  <nav class="toolbar" data-i18n-attr="aria-label:tool.aria">
     <button class="tool primary" id="drawBtn" type="button">
       <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M4 18 9 5l7 4 4 10z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><circle cx="4" cy="18" r="2" fill="currentColor"/><circle cx="9" cy="5" r="2" fill="currentColor"/><circle cx="16" cy="9" r="2" fill="currentColor"/><circle cx="20" cy="19" r="2" fill="currentColor"/></svg>
-      <span>Draw my field</span>
+      <span data-i18n="tool.draw"></span>
     </button>
-    <button class="tool" id="editBtn" type="button" title="Select a field to move or reshape it">
+    <button class="tool" id="editBtn" type="button" data-i18n-attr="title:tool.editTip">
       <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
-      <span>Edit</span>
+      <span data-i18n="tool.edit"></span>
     </button>
-    <button class="tool" id="deleteBtn" type="button" disabled title="Delete the selected field">
+    <button class="tool" id="deleteBtn" type="button" disabled data-i18n-attr="title:tool.deleteTip">
       <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
-      <span>Delete</span>
+      <span data-i18n="tool.delete"></span>
     </button>
     <span class="sep"></span>
-    <button class="tool" id="exportBtn" type="button" title="Download all fields as GeoJSON">
+    <button class="tool" id="exportBtn" type="button" data-i18n-attr="title:tool.exportTip">
       <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M12 3v12m0 0-4-4m4 4 4-4M4 17v3h16v-3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-      <span>Export</span>
+      <span data-i18n="tool.export"></span>
     </button>
-    <button class="tool" id="importBtn" type="button" title="Load fields from a GeoJSON file">
+    <button class="tool" id="importBtn" type="button" data-i18n-attr="title:tool.importTip">
       <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M12 15V3m0 0L8 7m4-4 4 4M4 17v3h16v-3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-      <span>Import</span>
+      <span data-i18n="tool.import"></span>
     </button>
     <input type="file" id="importFile" accept=".geojson,.json,application/geo+json,application/json" hidden />
   </nav>
 
   <!-- Climate timeline (Stage 2): shown when a field is selected -->
-  <section class="timeline collapsed" id="timeline" aria-label="Climate timeline" hidden>
+  <section class="timeline collapsed" id="timeline" data-i18n-attr="aria-label:tl.aria" hidden>
     <button type="button" class="tl-head" data-toggle="timeline" aria-expanded="false" aria-controls="tlBody">
-      <span class="tl-title">Climate of <b id="tlField"></b> <small>last 20 years · NASA</small> <em class="tl-stale" id="tlStale" hidden></em></span>
-      <span class="tl-legend" aria-hidden="true"><i class="lg-line"></i>each year <i class="lg-dash"></i>trend <i class="lg-now"></i>this year</span>
+      <span class="tl-title"><span data-i18n="tl.climateOf"></span> <b id="tlField"></b> <small data-i18n="tl.sub"></small> <em class="tl-stale" id="tlStale" hidden></em></span>
+      <span class="tl-legend" aria-hidden="true"><i class="lg-line"></i><span data-i18n="tl.lgYear"></span> <i class="lg-dash"></i><span data-i18n="tl.lgTrend"></span> <i class="lg-now"></i><span data-i18n="tl.lgNow"></span></span>
       <svg class="chev" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2"/></svg>
     </button>
     <div class="tl-body" id="tlBody">
       <div class="wx-card" id="wxCard"></div>
-      <div class="tl-chart"><div class="tl-chart-head"><h3 class="tl-h">Rainfall <small>(mm per year)</small></h3><span class="tl-trend-slot"></span></div><p class="tl-stat"></p><div class="tl-canvas"><canvas id="tlRain"></canvas><p class="tl-msg"></p></div></div>
-      <div class="tl-chart"><div class="tl-chart-head"><h3 class="tl-h">Yearly average temperature <small>(°C)</small></h3><span class="tl-trend-slot"></span></div><p class="tl-stat"></p><div class="tl-canvas"><canvas id="tlTemp"></canvas><p class="tl-msg"></p></div></div>
-      <div class="tl-chart"><div class="tl-chart-head"><h3 class="tl-h">Soil moisture <button type="button" class="help" data-tip="How much water is in the soil where roots grow: 0 = completely dry, 1 = full of water." aria-label="Help: How much water is in the soil where roots grow: 0 = completely dry, 1 = full of water.">?</button> <small>(0 dry – 1 wet)</small></h3><span class="tl-trend-slot"></span></div><p class="tl-stat"></p><div class="tl-canvas"><canvas id="tlSoil"></canvas><p class="tl-msg"></p></div></div>
+      <div class="tl-chart"><div class="tl-chart-head"><h3 class="tl-h"><span data-i18n="tl.rain"></span> <small data-i18n="tl.rainUnit"></small></h3><span class="tl-trend-slot"></span></div><p class="tl-stat"></p><div class="tl-canvas"><canvas id="tlRain"></canvas><p class="tl-msg"></p></div></div>
+      <div class="tl-chart"><div class="tl-chart-head"><h3 class="tl-h"><span data-i18n="tl.temp"></span> <small data-i18n="tl.tempUnit"></small></h3><span class="tl-trend-slot"></span></div><p class="tl-stat"></p><div class="tl-canvas"><canvas id="tlTemp"></canvas><p class="tl-msg"></p></div></div>
+      <div class="tl-chart"><div class="tl-chart-head"><h3 class="tl-h"><span data-i18n="tl.soil"></span> <button type="button" class="help" data-i18n-attr="data-tip:tl.soilTip,aria-label:tl.soilTipAria">?</button> <small data-i18n="tl.soilUnit"></small></h3><span class="tl-trend-slot"></span></div><p class="tl-stat"></p><div class="tl-canvas"><canvas id="tlSoil"></canvas><p class="tl-msg"></p></div></div>
     </div>
   </section>
 
