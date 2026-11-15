@@ -1,0 +1,151 @@
+/*
+ * ABF Field Shift: animated logo (inline SVG + CSS keyframes, no libraries).
+ * Used by /logo-animation.html (full, ~4 s), the map loading screen (full, then a slow orbit)
+ * and the map top bar (compact, ~1.5 s). One easing for everything; plays once.
+ *
+ * Markup: .abf-logo > .abf-mark (svg: .m-planet, .m-row ×3, .m-orbit > .m-ring + .m-sat)
+ *                   + .abf-words (.abf-big > span per letter, .abf-small, .abf-line, .abf-powered)
+ * --k scales every delay and duration: 1 = full 4 s animation, 0.47 = compact 1.5 s.
+ * Final state = the base styles, so prefers-reduced-motion simply turns the animations off.
+ */
+.abf-logo {
+  --abf-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --abf-blue: #2F4BFF;
+  --abf-lime: #D4F20C;
+  --abf-light: #F2F5FB;
+  --k: 1;
+  display: flex; flex-direction: column; align-items: center; gap: 0.6em;
+}
+.abf-logo .abf-mark { display: block; overflow: visible; }
+
+/* 1. Planet: fades in and grows 92 % → 100 % (0.0–0.7 s) */
+.abf-logo .m-planet { transform-box: fill-box; transform-origin: center;
+  animation: abf-planet calc(0.7s * var(--k)) var(--abf-ease) 0s both; }
+/* 2. Lime rows draw in one after another, clipped by the planet (0.5–1.5 s) */
+.abf-logo .m-row { stroke-dasharray: 1; stroke-dashoffset: 0;
+  animation: abf-draw calc(0.6s * var(--k)) var(--abf-ease) calc(0.5s * var(--k)) both; }
+.abf-logo .m-row.r2 { animation-delay: calc(0.7s * var(--k)); }
+.abf-logo .m-row.r3 { animation-delay: calc(0.9s * var(--k)); }
+/* 3. Orbit ring draws (1.2–1.9 s), then the satellite goes once around and settles (1.6–2.4 s) */
+.abf-logo .m-ring { stroke-dasharray: 1; stroke-dashoffset: 0;
+  animation: abf-draw calc(0.7s * var(--k)) var(--abf-ease) calc(1.2s * var(--k)) both; }
+.abf-logo .m-sat {
+  animation: abf-fade calc(0.2s * var(--k)) var(--abf-ease) calc(1.6s * var(--k)) both,
+             abf-sat-path calc(0.8s * var(--k)) linear calc(1.6s * var(--k)) both; /* easing is built into the path points */
+}
+.abf-logo .m-orbit { transform-box: view-box; transform-origin: 100px 100px; }
+
+/* 4. "ABF" letters rise one by one (2.2–3.0 s), "FIELD SHIFT" fades in while its spacing narrows (2.6–3.2 s) */
+.abf-logo .abf-words { display: flex; flex-direction: column; align-items: center; }
+.abf-logo .abf-big { font: 700 1em/1 'Space Grotesk', 'Inter', sans-serif; letter-spacing: 0.14em; margin-right: -0.14em; color: var(--abf-light); white-space: nowrap; }
+.abf-logo .abf-big > span { display: inline-block;
+  animation: abf-rise calc(0.6s * var(--k)) var(--abf-ease) calc(2.2s * var(--k)) both; }
+.abf-logo .abf-big > span:nth-child(2) { animation-delay: calc(2.32s * var(--k)); }
+.abf-logo .abf-big > span:nth-child(3) { animation-delay: calc(2.44s * var(--k)); }
+.abf-logo .abf-small { margin-top: 0.55em; font: 500 0.26em/1 'Space Grotesk', 'Inter', sans-serif; letter-spacing: 0.32em; margin-right: -0.32em;
+  text-transform: uppercase; color: var(--abf-lime); white-space: nowrap;
+  animation: abf-track calc(0.6s * var(--k)) var(--abf-ease) calc(2.6s * var(--k)) both; }
+
+/* 5. Thin lime line grows under the text (3.2–3.8 s); "Powered by NASA data" fades in (3.4–4.0 s) */
+.abf-logo .abf-line { width: 2.4em; height: 2px; margin-top: 0.45em; border-radius: 2px; background: var(--abf-lime); transform-origin: center;
+  animation: abf-grow calc(0.6s * var(--k)) var(--abf-ease) calc(3.2s * var(--k)) both; }
+.abf-logo .abf-powered { margin-top: 0.4em; font: 500 0.18em/1.3 'Inter', system-ui, sans-serif; letter-spacing: 0.08em; color: #9aa4cc; white-space: nowrap;
+  animation: abf-fade calc(0.6s * var(--k)) var(--abf-ease) calc(3.4s * var(--k)) both; }
+
+/* Loading screen: after the intro, the orbit turns very slowly (12 s per turn) until the app is ready */
+.abf-logo.abf-loop .m-orbit { animation: abf-spin 12s linear calc(4s * var(--k)) infinite; }
+
+/* Compact top-bar version: mark left, words right, no line / credit, 1.5 s */
+.abf-logo.abf-compact { --k: 0.47; flex-direction: row; gap: 8px; }
+.abf-logo.abf-compact .abf-words { align-items: flex-start; }
+.abf-logo.abf-compact .abf-big { margin-right: 0; }
+.abf-logo.abf-compact .abf-small { margin-top: 4px; margin-right: 0; }
+
+@keyframes abf-planet { from { opacity: 0; transform: scale(0.92); } }
+@keyframes abf-draw { from { stroke-dashoffset: 1; } }
+@keyframes abf-fade { from { opacity: 0; } }
+@keyframes abf-rise { from { opacity: 0; transform: translateY(0.3em); } }
+@keyframes abf-track { from { opacity: 0; letter-spacing: 0.7em; margin-right: -0.7em; } }
+@keyframes abf-grow { from { transform: scaleX(0); } }
+@keyframes abf-spin { to { transform: rotate(360deg); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .abf-logo, .abf-logo * { animation: none !important; }
+}
+
+/* Satellite: once around the ring (generated: 73 points on the ellipse, eased with the same curve) */
+@keyframes abf-sat-path {
+  0% { transform: translate(0px, 0px); }
+  1.39% { transform: translate(12.61px, 6.76px); }
+  2.78% { transform: translate(12.82px, 18.94px); }
+  4.17% { transform: translate(1.71px, 34.33px); }
+  5.56% { transform: translate(-18.11px, 50.59px); }
+  6.94% { transform: translate(-43.25px, 65.62px); }
+  8.33% { transform: translate(-70.23px, 77.88px); }
+  9.72% { transform: translate(-95.97px, 86.43px); }
+  11.11% { transform: translate(-118.21px, 91.01px); }
+  12.5% { transform: translate(-135.54px, 91.81px); }
+  13.89% { transform: translate(-147.41px, 89.39px); }
+  15.28% { transform: translate(-153.91px, 84.47px); }
+  16.67% { transform: translate(-155.59px, 77.82px); }
+  18.06% { transform: translate(-153.26px, 70.14px); }
+  19.44% { transform: translate(-147.83px, 62.03px); }
+  20.83% { transform: translate(-140.17px, 53.95px); }
+  22.22% { transform: translate(-131.06px, 46.23px); }
+  23.61% { transform: translate(-121.16px, 39.09px); }
+  25% { transform: translate(-110.96px, 32.64px); }
+  26.39% { transform: translate(-100.87px, 26.94px); }
+  27.78% { transform: translate(-91.13px, 21.98px); }
+  29.17% { transform: translate(-81.93px, 17.73px); }
+  30.56% { transform: translate(-73.38px, 14.12px); }
+  31.94% { transform: translate(-65.51px, 11.1px); }
+  33.33% { transform: translate(-58.34px, 8.59px); }
+  34.72% { transform: translate(-51.86px, 6.53px); }
+  36.11% { transform: translate(-46.03px, 4.85px); }
+  37.5% { transform: translate(-40.81px, 3.49px); }
+  38.89% { transform: translate(-36.14px, 2.41px); }
+  40.28% { transform: translate(-31.98px, 1.55px); }
+  41.67% { transform: translate(-28.29px, 0.88px); }
+  43.06% { transform: translate(-25.01px, 0.36px); }
+  44.44% { transform: translate(-22.09px, -0.03px); }
+  45.83% { transform: translate(-19.51px, -0.32px); }
+  47.22% { transform: translate(-17.22px, -0.53px); }
+  48.61% { transform: translate(-15.18px, -0.67px); }
+  50% { transform: translate(-13.38px, -0.76px); }
+  51.39% { transform: translate(-11.78px, -0.81px); }
+  52.78% { transform: translate(-10.36px, -0.82px); }
+  54.17% { transform: translate(-9.1px, -0.82px); }
+  55.56% { transform: translate(-7.99px, -0.79px); }
+  56.94% { transform: translate(-7px, -0.76px); }
+  58.33% { transform: translate(-6.12px, -0.71px); }
+  59.72% { transform: translate(-5.34px, -0.66px); }
+  61.11% { transform: translate(-4.64px, -0.61px); }
+  62.5% { transform: translate(-4.03px, -0.55px); }
+  63.89% { transform: translate(-3.49px, -0.5px); }
+  65.28% { transform: translate(-3.01px, -0.45px); }
+  66.67% { transform: translate(-2.59px, -0.4px); }
+  68.06% { transform: translate(-2.21px, -0.35px); }
+  69.44% { transform: translate(-1.88px, -0.3px); }
+  70.83% { transform: translate(-1.6px, -0.26px); }
+  72.22% { transform: translate(-1.34px, -0.23px); }
+  73.61% { transform: translate(-1.12px, -0.19px); }
+  75% { transform: translate(-0.93px, -0.16px); }
+  76.39% { transform: translate(-0.77px, -0.13px); }
+  77.78% { transform: translate(-0.62px, -0.11px); }
+  79.17% { transform: translate(-0.5px, -0.09px); }
+  80.56% { transform: translate(-0.4px, -0.07px); }
+  81.94% { transform: translate(-0.31px, -0.06px); }
+  83.33% { transform: translate(-0.24px, -0.04px); }
+  84.72% { transform: translate(-0.18px, -0.03px); }
+  86.11% { transform: translate(-0.13px, -0.02px); }
+  87.5% { transform: translate(-0.1px, -0.02px); }
+  88.89% { transform: translate(-0.07px, -0.01px); }
+  90.28% { transform: translate(-0.04px, -0.01px); }
+  91.67% { transform: translate(-0.03px, 0px); }
+  93.06% { transform: translate(-0.02px, 0px); }
+  94.44% { transform: translate(-0.01px, 0px); }
+  95.83% { transform: translate(0px, 0px); }
+  97.22% { transform: translate(0px, 0px); }
+  98.61% { transform: translate(0px, 0px); }
+  100% { transform: translate(0px, 0px); }
+}

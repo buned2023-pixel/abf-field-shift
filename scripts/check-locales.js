@@ -106,7 +106,7 @@ for (const f of jsFiles) {
 // index.html: visible text must come from data-i18n
 const html = fs.readFileSync(path.join(DIR, 'index.html'), 'utf8');
 const body = html.slice(html.indexOf('<body'));
-const HTML_OK = /^(ABF|Field Shift|2D|3D|EN|RU|TJ|VIIRS|MODIS ·|1\.5×|1\.0×|\?)$/;
+const HTML_OK = /^(ABF|Field Shift|Powered by NASA data|2D|3D|EN|RU|TJ|VIIRS|MODIS ·|1\.5×|1\.0×|\?)$/;
 body.replace(/<script[\s\S]*?<\/script>/g, '').replace(/<svg[\s\S]*?<\/svg>/g, '').split('\n').forEach((line) => {
   for (const m of line.matchAll(/>([^<>]+)</g)) {
     const s = m[1].replace(/\s+/g, ' ').trim();

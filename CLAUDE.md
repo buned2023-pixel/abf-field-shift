@@ -25,6 +25,11 @@ something failed, is blocked, or needs my decision, say so in one short line.
   1 h cache, disk copy in `data/power-cache/daily/`), `/api/disease-rules`, `/api/landcheck` and
   `/api/landzones` (Overpass), `/api/risk-rules`, `/api/crop-rules`, `/tiles/terrarium/...` (DEM proxy
   with disk cache in `data/tile-cache/`). Cache: 10 min in memory; errors are never cached.
+- Logo: `public/logo.css` (animated logo, inline SVG + CSS keyframes, `--k` scales the timing),
+  `public/logo-animation.html` (full-screen 1920x1080, ~4 s, R or click replays; for screen recording),
+  `public/img/abf-mark.svg` (static mark and favicon). The map loader plays the full animation once per
+  browser session (sessionStorage `fieldshift.intro`), then a slow orbit until the map is ready (300 ms fade);
+  the top bar plays a 1.5 s compact version on every load.
 - `lib/accounts.js`: private accounts (username + password, argon2id, one-time recovery code), httpOnly
   session cookie, CSRF header, login rate limit. SQLite `data/accounts.db` (git-ignored). Routes:
   `/api/auth/*`, `/api/fields` and `/api/settings` (always filtered by user; others' items give 404).

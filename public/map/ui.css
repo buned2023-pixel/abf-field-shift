@@ -248,7 +248,7 @@ body.tl-open .toolbar { bottom: calc(var(--bz) + var(--gap)); }
 .lang-switch button:focus-visible { outline: 2px solid var(--accent-text); outline-offset: 1px; }
 @media (max-width: 480px) {
   .lang-switch button { min-width: 30px; padding: 0 4px; font-size: 11px; }
-  .brand .abf-word { display: none; } /* phone: logo mark only, so search and the switch keep room */
+  .brand .abf-word, .brand .abf-words { display: none; } /* phone: logo mark only, so search and the switch keep room */
 }
 
 /* ── Cyrillic-safe fonts: Inter everywhere (tabular digits for numbers); Space Grotesk only in the logo ── */

@@ -1254,8 +1254,10 @@
   const hideLoader = () => {
     if (loaderHidden) return;
     loaderHidden = true;
-    $('loader').classList.add('done');
-    setTimeout(() => $('loader').remove(), 700);
+    const el = $('loader');
+    if (!el) return; // intro already seen in this session
+    el.classList.add('done'); // 300 ms fade
+    setTimeout(() => el.remove(), 350);
   };
   map.once('load', hideLoader);
   map.once('style.load', () => setTimeout(hideLoader, 5000)); // slow horizon tiles shouldn't hold it

@@ -2,6 +2,7 @@
   "app.mapAria": "3D terrain map",
   "app.loading": "Loading terrain and satellite data…",
   "app.footer": "Powered by NASA data · Space Apps Challenge 2026",
+  "app.logoAria": "ABF Field Shift. Powered by NASA data",
 
   "top.recenter": "Re-center on my location",
   "top.brandAria": "ABF Field Shift: re-center the map on my location",

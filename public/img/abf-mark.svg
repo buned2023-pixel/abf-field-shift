@@ -6,6 +6,6 @@
     <path d="M30 132 Q100 104 170 132"/>
     <path d="M30 152 Q100 124 170 152"/>
   </g>
-  <ellipse cx="100" cy="100" rx="92" ry="30" transform="rotate(-24 100 100)" fill="none" stroke="#F4F6FA" stroke-width="4"/>
-  <circle cx="168" cy="69" r="9" fill="#D4F20C"/>
+  <ellipse cx="100" cy="100" rx="92" ry="30" transform="rotate(-24 100 100)" fill="none" stroke="#F2F5FB" stroke-width="4"/>
+  <circle cx="170.7" cy="54.4" r="9" fill="#D4F20C"/>
 </svg>
