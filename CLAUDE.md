@@ -19,6 +19,16 @@ something failed, is blocked, or needs my decision, say so in one short line.
   external API; never send keys to the browser and never print them.
 - Every command and network request needs a timeout (max 2 minutes).
 
+## Deploy (Render, free web service)
+
+- `render.yaml` blueprint: `npm install`, `npm start`, health check `/health`, Node 24 (`.node-version`,
+  `engines` >= 24.7 for `node:sqlite` and `crypto.argon2`). Keys are set in the Render dashboard only.
+- Server listens on `process.env.PORT` and 0.0.0.0 with `trust proxy` (req.ip = visitor).
+- `lib/limits.js`: per-IP rate limit on `/api/*` (`API_RATE_LIMIT`, default 300 per 5 min; 40 per hour on
+  weather/location/geocode) and daily caps on paid upstream calls (`WEATHERSTACK_DAILY_LIMIT`,
+  `IPSTACK_DAILY_LIMIT`, default 3 each; cached answers are free). Counters reset on restart.
+- Free plan disk is temporary: `data/accounts.db` (accounts, saved fields) is lost on every restart or deploy.
+
 ## Layout
 
 - `server.js`: Express backend. Endpoints: `/api/location` (IPstack), `/api/geocode`, `/api/weather`

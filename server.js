@@ -5,8 +5,17 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 
+const { rateLimit, budget } = require('./lib/limits');
+
 const app = express();
 const PORT = process.env.PORT || 3000;
+// Behind Render's proxy: req.ip is the visitor's address, req.secure follows the original https request
+app.set('trust proxy', 1);
+
+// Daily caps on paid upstream APIs (free plans: about 100 calls a month each); cached answers do not count
+const envInt = (name, def) => { const n = parseInt(process.env[name], 10); return Number.isFinite(n) && n >= 0 ? n : def; };
+const ipstackBudget = budget('ipstack', envInt('IPSTACK_DAILY_LIMIT', 3));
+const weatherstackBudget = budget('weatherstack', envInt('WEATHERSTACK_DAILY_LIMIT', 3));
 
 const IPSTACK_KEY = process.env.IPSTACK_KEY;
 const WEATHERSTACK_KEY = process.env.WEATHERSTACK_KEY;
@@ -14,6 +23,13 @@ const FIRMS_MAP_KEY = process.env.FIRMS_MAP_KEY;
 
 // Default location: Dushanbe, Tajikistan
 const DEFAULT_LOCATION = { lat: 38.56, lon: 68.77, city: 'Dushanbe', country: 'Tajikistan' };
+
+// Health check for the host (Render)
+app.get('/health', (req, res) => res.json({ ok: true }));
+
+// Rate limits per visitor: all API routes, and tighter ones for the routes that use paid quotas
+app.use('/api/', rateLimit({ name: 'api', windowMs: 5 * 60 * 1000, max: envInt('API_RATE_LIMIT', 300) }));
+app.use(['/api/weather', '/api/location', '/api/geocode'], rateLimit({ name: 'paid', windowMs: 60 * 60 * 1000, max: 40 }));
 
 app.use(express.static(path.join(__dirname, 'public')));
 app.use('/locales', express.static(path.join(__dirname, 'locales'))); // UI texts: en, ru, tg
@@ -99,17 +115,17 @@ function round(n, d = 2) {
 // ─── Routes ───────────────────────────────────────────────────────────────────
 
 // GET /api/location  — the visitor's location via IPstack (normalized)
-// GET /api/location/:ip — a specific IP
+// (lookups of other IPs were removed for the public deployment)
 async function locationHandler(req, res) {
   try {
     let ip = req.params.ip;
     if (!ip) {
-      const fwd = (req.headers['x-forwarded-for'] || '').split(',')[0].trim();
-      ip = fwd || req.socket.remoteAddress;
+      ip = req.ip || req.socket.remoteAddress; // trust proxy: the real visitor address, not a spoofable header
       // Running locally: let IPstack detect the public IP of this machine
       if (isPrivateIp(ip)) ip = 'check';
     }
     const data = await cached(`ip:${ip}`, CACHE_TTL, async () => {
+      ipstackBudget.take();
       const url = `https://api.apilayer.net/ipstack/${encodeURIComponent(ip)}?access_key=${IPSTACK_KEY}`;
       const d = JSON.parse(await fetchUrl(url));
       if (d.error || d.success === false || d.latitude == null || d.longitude == null) throw new Error('location_unavailable');
@@ -127,7 +143,6 @@ async function locationHandler(req, res) {
   }
 }
 app.get('/api/location', locationHandler);
-app.get('/api/location/:ip', locationHandler);
 
 // GET /api/default-location
 app.get('/api/default-location', (req, res) => res.json({ ...DEFAULT_LOCATION, source: 'default' }));
@@ -147,6 +162,7 @@ app.get('/api/geocode', async (req, res) => {
     if (results.length) return res.json({ results });
   } catch (_) { /* fall through */ }
   try {
+    weatherstackBudget.take(); // fallback search only when Open-Meteo found nothing
     const url = `https://api.apilayer.net/weatherstack/current?access_key=${WEATHERSTACK_KEY}&query=${encodeURIComponent(q)}`;
     const data = JSON.parse(await fetchUrl(url));
     if (data.location && data.location.lat) {
@@ -159,7 +175,7 @@ app.get('/api/geocode', async (req, res) => {
   res.json({ results: [] });
 });
 
-// GET /api/weather?lat=&lon=  (or /api/weather/:query) — normalized current weather
+// GET /api/weather?lat=&lon= — normalized current weather
 async function weatherHandler(req, res) {
   try {
     let query = req.params.query;
@@ -170,6 +186,7 @@ async function weatherHandler(req, res) {
       query = `${round(lat, 3)},${round(lon, 3)}`;
     }
     const data = await cached(`wx:${query}`, CACHE_TTL, async () => {
+      weatherstackBudget.take();
       const url = `https://api.apilayer.net/weatherstack/current?access_key=${WEATHERSTACK_KEY}&query=${encodeURIComponent(query)}&units=m`;
       const d = JSON.parse(await fetchUrl(url));
       if (d.error || !d.current) throw new Error('weather_unavailable');
@@ -198,7 +215,6 @@ async function weatherHandler(req, res) {
   }
 }
 app.get('/api/weather', weatherHandler);
-app.get('/api/weather/:query', weatherHandler);
 
 // GET /api/firms?lat=&lon=&range=&days= — fire hot spots, MODIS + VIIRS
 app.get('/api/firms', async (req, res) => {
@@ -652,6 +668,6 @@ app.get('/api/crops', (req, res) => {
 
 // ─── Start server ─────────────────────────────────────────────────────────────
 
-app.listen(PORT, () => {
-  console.log(`Field Shift server running on http://localhost:${PORT}`);
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`Field Shift server running on port ${PORT} (http://localhost:${PORT})`);
 });

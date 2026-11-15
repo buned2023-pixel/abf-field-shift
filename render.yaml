@@ -1,0 +1,25 @@
+# Render blueprint for ABF Field Shift (free web service).
+# Key VALUES are never stored here: "sync: false" makes Render ask for them in the dashboard.
+services:
+  - type: web
+    name: abf-field-shift
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: IPSTACK_KEY          # apilayer IPstack: approximate visitor location
+        sync: false
+      - key: WEATHERSTACK_KEY     # apilayer Weatherstack: current weather card
+        sync: false
+      - key: FIRMS_MAP_KEY        # NASA FIRMS MAP_KEY: fire detections
+        sync: false
+      # Optional limits (defaults shown); change only if your API plans allow more calls
+      - key: WEATHERSTACK_DAILY_LIMIT
+        value: "3"
+      - key: IPSTACK_DAILY_LIMIT
+        value: "3"
+      - key: API_RATE_LIMIT        # requests per visitor per 5 minutes on /api/*
+        value: "300"
