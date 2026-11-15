@@ -3,152 +3,398 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="theme-color" content="#060914" />
-  <title>Field Shift</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-  <link rel="stylesheet" href="style.css" />
+  <title>ABF Field Shift: see your field from space</title>
+  <meta name="description" content="Field Shift turns NASA satellite data into a clear plan for your farm: draw your field on a 3D map, read drought, heat, fire and disease warnings, and get a crop plan. Built for the NASA Space Apps Challenge 2026." />
+  <meta name="theme-color" content="#0A1020" />
+  <link rel="icon" type="image/svg+xml" href="/img/abf-mark.svg" />
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="ABF Field Shift: see your field from space" />
+  <meta property="og:description" content="Know what to plant. Field Shift turns NASA satellite data into a clear plan for your farm." />
+  <meta property="og:image" content="/assets/abf-logo.png" />
+  <meta property="og:image:alt" content="ABF Field Shift logo: a blue planet with lime field rows and an orbit ring" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <link rel="preload" href="/landing/fonts/space-grotesk-latin.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="preload" href="/landing/fonts/inter-latin.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="stylesheet" href="/logo.css" />
+  <link rel="stylesheet" href="/landing/landing.css" />
 </head>
 <body>
-  <div class="stars" aria-hidden="true"></div>
+  <a class="skip" href="#main">Skip to content</a>
 
-  <header class="app-header">
-    <div class="brand">
-      <span class="brand-mark" aria-hidden="true">
-        <svg viewBox="0 0 32 32" width="28" height="28"><circle cx="16" cy="16" r="6" fill="currentColor"/><ellipse cx="16" cy="16" rx="14" ry="5" fill="none" stroke="currentColor" stroke-width="1.6" transform="rotate(-25 16 16)"/></svg>
-      </span>
-      <div>
-        <h1 data-i18n="appTitle">Field Shift</h1>
-        <p class="tagline" data-i18n="tagline">Satellite climate insight for farmers</p>
-      </div>
-    </div>
-    <div class="lang-switcher" role="group" aria-label="Language">
-      <button class="lang-btn" data-lang="en">EN</button>
-      <button class="lang-btn" data-lang="ru">RU</button>
-      <button class="lang-btn" data-lang="tj">TJ</button>
+  <!-- ── Header ── -->
+  <header class="site-head" id="siteHead">
+    <div class="wrap head-row">
+      <a class="brand" href="#top" aria-label="ABF Field Shift, back to top">
+        <img src="/img/abf-mark.svg" alt="" width="36" height="36" />
+        <span class="brand-words"><span class="brand-abf">ABF</span><span class="brand-tag">Field Shift</span></span>
+      </a>
+      <nav class="head-nav" aria-label="Sections">
+        <a href="#problem">Problem</a>
+        <a href="#how">How it works</a>
+        <a href="#data">Data</a>
+        <a href="#team">Team</a>
+      </nav>
+      <a class="btn btn-lime btn-sm" href="/map/" data-open-app><span>Open the app</span></a>
     </div>
   </header>
 
-  <main>
-    <!-- Location bar -->
-    <section class="location-bar">
-      <form class="search-bar" id="searchForm" autocomplete="off">
-        <svg class="search-icon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="2"/><path d="M20 20l-4-4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-        <input type="search" id="searchInput" data-i18n-placeholder="searchLocation" placeholder="Search a city…" />
-        <ul class="search-results" id="searchResults" hidden></ul>
-      </form>
-      <button class="btn-ghost" id="myLocationBtn" type="button">
-        <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><circle cx="12" cy="12" r="3" fill="currentColor"/><circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 1v3M12 20v3M1 12h3M20 12h3" stroke="currentColor" stroke-width="2"/></svg>
-        <span data-i18n="myLocation">My location</span>
-      </button>
-    </section>
-    <div class="place-line">
-      <h2 class="place-name" id="placeName">Dushanbe</h2>
-      <span class="place-meta" id="placeMeta"></span>
-    </div>
-    <p class="search-msg" id="searchMsg" hidden></p>
-
-    <!-- Map -->
-    <section class="map-section card">
-      <div id="map"></div>
-      <div class="map-legend">
-        <div class="legend-item"><span class="legend-dot legend-viirs"></span><span data-i18n="viirs">VIIRS fire</span></div>
-        <div class="legend-item"><span class="legend-dot legend-modis"></span><span data-i18n="modis">MODIS fire</span></div>
-        <div class="legend-item"><span class="legend-dot legend-point"></span><span data-i18n="yourPoint">Selected point</span></div>
-      </div>
-      <p class="map-hint" data-i18n="mapHint">Tap the map to analyze any point</p>
-    </section>
-
-    <!-- Warnings -->
-    <section class="warnings" id="warnings" aria-live="polite"></section>
-
-    <!-- Weather + Fire -->
-    <section class="grid-2">
-      <article class="card" id="weatherCard">
-        <header class="card-header"><h3 data-i18n="weather">Current weather</h3></header>
-        <div id="weatherBody" class="card-body"><div class="skeleton tall"></div><div class="skeleton"></div></div>
-      </article>
-      <article class="card" id="fireCard">
-        <header class="card-header"><h3 data-i18n="fireRisk">Fire risk</h3></header>
-        <div id="fireBody" class="card-body"><div class="skeleton tall"></div><div class="skeleton"></div></div>
-      </article>
-    </section>
-
-    <!-- Climate -->
-    <section class="section">
-      <div class="section-header">
-        <h2 data-i18n="climateTrends">Climate trends · last 20 years</h2>
-        <p class="section-sub" data-i18n="climateSub">NASA POWER satellite data, annual values with linear trend</p>
-      </div>
-      <div class="grid-3">
-        <article class="card chart-card" data-metric="precip">
-          <div class="chart-head">
-            <div><h3 data-i18n="precipitation">Precipitation</h3><span class="unit" data-i18n="unit_mm">mm / year</span></div>
-            <span class="trend-badge" id="precipTrend"></span>
-          </div>
-          <div class="chart-stat" id="precipStat"></div>
-          <div class="chart-container"><canvas id="precipChart"></canvas><div class="chart-loading" data-i18n="loadingClimate">Loading…</div></div>
-        </article>
-        <article class="card chart-card" data-metric="temp">
-          <div class="chart-head">
-            <div><h3 data-i18n="avgTemp">Temperature</h3><span class="unit" data-i18n="unit_c">°C</span></div>
-            <span class="trend-badge" id="tempTrend"></span>
-          </div>
-          <div class="chart-stat" id="tempStat"></div>
-          <div class="chart-container"><canvas id="tempChart"></canvas><div class="chart-loading" data-i18n="loadingClimate">Loading…</div></div>
-        </article>
-        <article class="card chart-card" data-metric="soil">
-          <div class="chart-head">
-            <div><h3 data-i18n="soilMoisture">Root-zone soil wetness</h3><span class="unit" data-i18n="unit_soil">0–1</span></div>
-            <span class="trend-badge" id="soilTrend"></span>
-          </div>
-          <div class="chart-stat" id="soilStat"></div>
-          <div class="chart-container"><canvas id="soilChart"></canvas><div class="chart-loading" data-i18n="loadingClimate">Loading…</div></div>
-        </article>
-      </div>
-    </section>
-
-    <!-- Crop advisor -->
-    <section class="section">
-      <div class="section-header">
-        <h2 data-i18n="cropAdvisor">Crop advisor</h2>
-        <p class="section-sub" data-i18n="advisorSub">Recommendations from this point’s 20-year NASA climate record</p>
-      </div>
-      <form class="card crop-form" id="cropForm">
-        <fieldset class="form-group">
-          <legend data-i18n="waterAvailability">Water availability</legend>
-          <div class="segmented" id="waterSeg">
-            <label><input type="radio" name="water" value="low" /><span data-i18n="low">Low</span></label>
-            <label><input type="radio" name="water" value="medium" checked /><span data-i18n="medium">Medium</span></label>
-            <label><input type="radio" name="water" value="high" /><span data-i18n="high">High</span></label>
-          </div>
-        </fieldset>
-        <div class="form-group">
-          <label for="landSize" data-i18n="landSize">Land size</label>
-          <div class="input-with-unit">
-            <input type="number" id="landSize" value="5" min="0.1" max="100000" step="0.1" inputmode="decimal" />
-            <span class="input-unit" data-i18n="hectares">ha</span>
+  <main id="main">
+    <!-- ── 3. Hero ── -->
+    <section class="hero dark" id="top" aria-labelledby="heroTitle">
+      <div class="wrap hero-grid">
+        <div class="hero-copy">
+          <p class="label reveal">NASA Space Apps Challenge 2026 · Team ABF</p>
+          <h1 class="h-xl" id="heroTitle" data-split>
+            <span class="line"><span>See your field</span></span>
+            <span class="line"><span>from space</span></span>
+          </h1>
+          <p class="lead reveal">Know what to plant. Field Shift turns NASA satellite data into a clear plan for your farm.</p>
+          <div class="btn-row reveal">
+            <a class="btn btn-lime" href="/map/" data-open-app><span>Open the app</span></a>
+            <a class="btn btn-ghost" href="#how"><span>See how it works</span></a>
           </div>
         </div>
-        <button class="btn-primary" type="submit" data-i18n="analyze">Recommend crops</button>
-      </form>
+        <div class="hero-visual reveal" aria-hidden="true">
+          <div class="hero-parallax" data-parallax>
+            <svg class="art" viewBox="0 0 640 520" role="presentation">
+              <defs>
+                <linearGradient id="hSky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#13204a"/><stop offset="1" stop-color="#0A1020"/></linearGradient>
+                <clipPath id="hPlanet"><circle cx="472" cy="138" r="64"/></clipPath>
+              </defs>
+              <rect width="640" height="520" rx="28" fill="url(#hSky)"/>
+              <g fill="none" stroke="#2F4BFF" stroke-opacity="0.18">
+                <path d="M0 330 C120 300 200 330 320 310 S520 280 640 300"/>
+                <path d="M0 360 C120 330 220 360 330 340 S520 312 640 330"/>
+                <path d="M0 392 C130 362 230 392 340 372 S530 344 640 362"/>
+              </g>
+              <path d="M0 360 L90 290 L150 318 L230 238 L300 300 L360 262 L440 320 L520 270 L640 330 L640 520 L0 520 Z" fill="#1a2c66"/>
+              <path d="M0 410 L110 350 L190 380 L280 330 L370 372 L460 340 L560 382 L640 360 L640 520 L0 520 Z" fill="#223a88"/>
+              <path d="M0 460 L140 418 L260 440 L380 410 L500 438 L640 420 L640 520 L0 520 Z" fill="#2F4BFF" fill-opacity="0.55"/>
+              <path d="M228 452 L300 424 L372 446 L304 478 Z" fill="#D4F20C" fill-opacity="0.18" stroke="#D4F20C" stroke-width="3" stroke-linejoin="round"/>
+              <g fill="#F2F5FB"><circle cx="228" cy="452" r="5"/><circle cx="300" cy="424" r="5"/><circle cx="372" cy="446" r="5"/><circle cx="304" cy="478" r="5"/></g>
+              <circle cx="472" cy="138" r="64" fill="#2F4BFF"/>
+              <g clip-path="url(#hPlanet)" fill="none" stroke="#D4F20C" stroke-width="6" stroke-linecap="round">
+                <path d="M402 150 Q472 122 542 150"/><path d="M402 170 Q472 142 542 170"/><path d="M402 190 Q472 162 542 190"/>
+              </g>
+              <ellipse cx="472" cy="138" rx="95" ry="31" transform="rotate(-24 472 138)" fill="none" stroke="#F2F5FB" stroke-width="4"/>
+              <circle cx="545" cy="91" r="9" fill="#D4F20C"/>
+              <path d="M300 424 L455 190" stroke="#D4F20C" stroke-width="1.5" stroke-dasharray="4 7" opacity="0.6"/>
+            </svg>
+            <img class="shot" src="/landing/map.png" alt="" loading="lazy" decoding="async" onerror="this.remove()" />
+          </div>
+        </div>
+      </div>
+    </section>
 
-      <h3 class="sub-heading" data-i18n="topCrops">Top 3 crops</h3>
-      <div class="grid-3" id="cropResults"><p class="muted" data-i18n="waitData">Waiting for climate data…</p></div>
+    <!-- ── 4. Ticker ── -->
+    <section class="ticker" aria-label="What Field Shift uses">
+      <div class="ticker-track">
+        <ul class="ticker-list">
+          <li>NASA POWER</li><li>NASA FIRMS</li><li>MODIS</li><li>VIIRS</li><li>20 years of climate data</li><li>3D field map</li>
+        </ul>
+        <ul class="ticker-list" aria-hidden="true">
+          <li>NASA POWER</li><li>NASA FIRMS</li><li>MODIS</li><li>VIIRS</li><li>20 years of climate data</li><li>3D field map</li>
+        </ul>
+      </div>
+    </section>
 
-      <h3 class="sub-heading" data-i18n="rotationPlan">3-year rotation plan</h3>
-      <div class="rotation" id="rotationTimeline"></div>
-      <p class="perennial-note" id="perennialNote" hidden></p>
+    <!-- ── 5. Problem ── -->
+    <section class="light sec" id="problem" aria-labelledby="problemTitle">
+      <div class="wrap">
+        <p class="label reveal">The problem</p>
+        <h2 class="h-xl" id="problemTitle" data-split>
+          <span class="line"><span>Farming is getting</span></span>
+          <span class="line"><span>harder to plan</span></span>
+        </h2>
+        <ol class="problems">
+          <li class="problem reveal">
+            <span class="num" aria-hidden="true">01</span>
+            <div><h3>The weather is changing</h3><p>Seasons do not repeat like before. Hotter summers and dry spells make last year's plan a guess.</p></div>
+          </li>
+          <li class="problem reveal">
+            <span class="num" aria-hidden="true">02</span>
+            <div><h3>Water is short</h3><p>Rain alone often does not cover what a crop needs, and the nearest river or canal may be far from the field.</p></div>
+          </li>
+          <li class="problem reveal">
+            <span class="num" aria-hidden="true">03</span>
+            <div><h3>Soil is losing fertility</h3><p>Planting the same crop year after year drains the soil and lets pests and diseases build up.</p></div>
+          </li>
+        </ol>
+      </div>
+    </section>
+
+    <!-- ── 6. How it works ── -->
+    <section class="dark sec how" id="how" aria-labelledby="howTitle">
+      <div class="wrap">
+        <p class="label reveal">How it works</p>
+        <h2 class="h-xl" id="howTitle" data-split>
+          <span class="line"><span>Four steps</span></span>
+          <span class="line"><span>to a plan</span></span>
+        </h2>
+      </div>
+      <div class="how-pin" id="howPin">
+        <div class="wrap how-grid">
+          <div class="how-steps">
+            <div class="how-progress" aria-hidden="true"><span id="howBar"></span></div>
+            <ol>
+              <li class="step reveal" data-step="0">
+                <span class="step-n">Step 1</span>
+                <h3>Open the map</h3>
+                <p>A 3D map of the mountains and valleys opens near you, or on Dushanbe. Search for your village or jump to your location.</p>
+                <div class="step-visual-inline" aria-hidden="true"></div>
+              </li>
+              <li class="step reveal" data-step="1">
+                <span class="step-n">Step 2</span>
+                <h3>Draw your field</h3>
+                <p>Click each corner on the terrain. Field Shift measures the area, height and slope, and checks on OpenStreetMap that the land is not water, a village or a road.</p>
+                <div class="step-visual-inline" aria-hidden="true"></div>
+              </li>
+              <li class="step reveal" data-step="2">
+                <span class="step-n">Step 3</span>
+                <h3>Read the risks</h3>
+                <p>Drought, heat, fire and disease warnings for your field, each LOW, MEDIUM or HIGH, with the NASA numbers behind them and simple advice.</p>
+                <div class="step-visual-inline" aria-hidden="true"></div>
+              </li>
+              <li class="step reveal" data-step="3">
+                <span class="step-n">Step 4</span>
+                <h3>Get your plan</h3>
+                <p>The best 3 crops for the field, when to plant them, how much water they need, and a 3-year rotation that keeps the soil fertile.</p>
+                <div class="step-visual-inline" aria-hidden="true"></div>
+              </li>
+            </ol>
+          </div>
+          <div class="how-visual" aria-hidden="true">
+            <!-- 1: map -->
+            <figure class="visual on" data-visual="0">
+              <svg class="art" viewBox="0 0 480 360">
+                <rect width="480" height="360" rx="22" fill="#111b3d"/>
+                <g fill="none" stroke="#2F4BFF" stroke-opacity="0.45" stroke-width="1.5">
+                  <path d="M20 250 C90 200 150 230 220 190 S360 150 460 180"/><path d="M20 280 C100 230 160 260 230 222 S370 186 460 210"/>
+                  <path d="M20 310 C110 262 170 290 240 254 S380 220 460 240"/><path d="M60 200 C120 150 180 170 240 130 S350 100 420 120"/>
+                </g>
+                <rect x="24" y="22" width="300" height="40" rx="12" fill="#1c2a5a"/>
+                <circle cx="48" cy="42" r="8" fill="none" stroke="#9aa4cc" stroke-width="2.5"/><path d="M54 48l6 6" stroke="#9aa4cc" stroke-width="2.5" stroke-linecap="round"/>
+                <rect x="70" y="36" width="140" height="12" rx="6" fill="#33427a"/>
+                <path d="M300 214c0-22 18-36 34-36s34 14 34 36c0 26-34 58-34 58s-34-32-34-58z" fill="#D4F20C"/>
+                <circle cx="334" cy="214" r="12" fill="#0A1020"/>
+              </svg>
+              <img class="shot" src="/landing/map.png" alt="" loading="lazy" decoding="async" onerror="this.remove()" />
+            </figure>
+            <!-- 2: draw -->
+            <figure class="visual" data-visual="1">
+              <svg class="art" viewBox="0 0 480 360">
+                <rect width="480" height="360" rx="22" fill="#111b3d"/>
+                <path d="M0 230 L90 170 L170 200 L260 140 L340 190 L480 150 L480 360 L0 360 Z" fill="#1a2c66"/>
+                <path d="M0 290 L120 240 L230 268 L340 230 L480 262 L480 360 L0 360 Z" fill="#223a88"/>
+                <path d="M130 282 L238 238 L352 270 L250 318 Z" fill="#D4F20C" fill-opacity="0.2" stroke="#D4F20C" stroke-width="3" stroke-linejoin="round"/>
+                <g fill="#F2F5FB" stroke="#2F4BFF" stroke-width="3"><circle cx="130" cy="282" r="7"/><circle cx="238" cy="238" r="7"/><circle cx="352" cy="270" r="7"/><circle cx="250" cy="318" r="7"/></g>
+                <rect x="166" y="64" width="148" height="56" rx="12" fill="#0A1020" stroke="#2F4BFF"/>
+                <rect x="184" y="80" width="62" height="10" rx="5" fill="#F2F5FB"/><rect x="184" y="98" width="98" height="8" rx="4" fill="#9aa4cc"/>
+              </svg>
+            </figure>
+            <!-- 3: risks -->
+            <figure class="visual" data-visual="2">
+              <div class="mock">
+                <p class="mock-k">Risks for this field</p>
+                <div class="mock-risk lvl-low"><span>Drought risk</span><b>LOW</b></div>
+                <div class="mock-risk lvl-med"><span>Heat risk</span><b>MEDIUM</b></div>
+                <div class="mock-risk lvl-low"><span>Fire risk</span><b>LOW</b></div>
+                <div class="mock-risk lvl-high"><span>Disease risk</span><b>HIGH</b></div>
+              </div>
+              <img class="shot" src="/landing/risks.png" alt="" loading="lazy" decoding="async" onerror="this.remove()" />
+            </figure>
+            <!-- 4: plan -->
+            <figure class="visual" data-visual="3">
+              <div class="mock">
+                <p class="mock-k">3-year rotation</p>
+                <div class="mock-year"><span>Year 1</span><b>Winter wheat</b><em class="n-minus">uses nitrogen</em></div>
+                <div class="mock-year"><span>Year 2</span><b>Chickpea</b><em class="n-plus">adds nitrogen</em></div>
+                <div class="mock-year"><span>Year 3</span><b>Barley</b><em class="n-minus">uses nitrogen</em></div>
+                <p class="mock-note">Example only. Your plan depends on your field.</p>
+              </div>
+              <img class="shot" src="/landing/plan.png" alt="" loading="lazy" decoding="async" onerror="this.remove()" />
+            </figure>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── 7. Features ── -->
+    <section class="light sec" id="features" aria-labelledby="featTitle">
+      <div class="wrap">
+        <p class="label reveal">What you get</p>
+        <h2 class="h-xl" id="featTitle" data-split>
+          <span class="line"><span>Everything about</span></span>
+          <span class="line"><span>one field</span></span>
+        </h2>
+        <ul class="cards">
+          <li class="card reveal">
+            <div class="card-media" aria-hidden="true">
+              <svg class="m-a" viewBox="0 0 160 100"><path d="M0 70 L40 40 L70 56 L110 24 L160 60 L160 100 L0 100Z" fill="#2F4BFF"/><path d="M0 86 L60 64 L110 78 L160 70 L160 100 L0 100Z" fill="#1d33c4"/></svg>
+              <svg class="m-b" viewBox="0 0 160 100"><path d="M0 70 L40 40 L70 56 L110 24 L160 60 L160 100 L0 100Z" fill="#2F4BFF"/><path d="M52 74 L88 60 L120 72 L86 88Z" fill="#D4F20C"/><g fill="#0A1020"><path d="M24 64l5-14 5 14z"/><path d="M132 56l5-14 5 14z"/></g></svg>
+            </div>
+            <h3>3D field map</h3>
+            <p>Mountains in 3D with shaded slopes, height colours, rivers, lakes and 3D trees. Height, slope and the way the slope faces are measured for your field.</p>
+          </li>
+          <li class="card reveal">
+            <div class="card-media" aria-hidden="true">
+              <svg class="m-a" viewBox="0 0 160 100"><rect x="20" y="22" width="120" height="16" rx="8" fill="#2F4BFF"/><rect x="20" y="46" width="120" height="16" rx="8" fill="#2F4BFF" opacity="0.6"/><rect x="20" y="70" width="120" height="16" rx="8" fill="#2F4BFF" opacity="0.35"/></svg>
+              <svg class="m-b" viewBox="0 0 160 100"><rect x="20" y="22" width="120" height="16" rx="8" fill="#1f9e5a"/><rect x="20" y="46" width="120" height="16" rx="8" fill="#e08a00"/><rect x="20" y="70" width="120" height="16" rx="8" fill="#d22a3d"/></svg>
+            </div>
+            <h3>Risk warnings</h3>
+            <p>Drought, heat, fire and crop disease risk from NASA data, each with a plain sentence and what to do.</p>
+          </li>
+          <li class="card reveal">
+            <div class="card-media" aria-hidden="true">
+              <svg class="m-a" viewBox="0 0 160 100"><g fill="none" stroke="#2F4BFF" stroke-width="5" stroke-linecap="round"><path d="M30 84V40"/><path d="M80 84V28"/><path d="M130 84V50"/></g></svg>
+              <svg class="m-b" viewBox="0 0 160 100"><g fill="none" stroke="#2F4BFF" stroke-width="5" stroke-linecap="round"><path d="M30 84V40"/><path d="M80 84V28"/><path d="M130 84V50"/></g><g fill="#D4F20C" stroke="#0A1020" stroke-width="2"><ellipse cx="20" cy="46" rx="10" ry="6"/><ellipse cx="90" cy="34" rx="10" ry="6"/><ellipse cx="120" cy="56" rx="10" ry="6"/></g></svg>
+            </div>
+            <h3>Crop plan</h3>
+            <p>11 crops scored for your field. The best 3, their planting window, and a 3-year rotation with a legume to feed the soil.</p>
+          </li>
+          <li class="card reveal">
+            <div class="card-media" aria-hidden="true">
+              <svg class="m-a" viewBox="0 0 160 100"><path d="M80 12s30 32 30 52a30 30 0 0 1-60 0c0-20 30-52 30-52z" fill="#2F4BFF"/></svg>
+              <svg class="m-b" viewBox="0 0 160 100"><path d="M0 64 C30 50 50 78 80 62 S130 50 160 60" fill="none" stroke="#2F4BFF" stroke-width="10" stroke-linecap="round"/><path d="M40 30 L110 58" stroke="#0A1020" stroke-width="2" stroke-dasharray="4 5"/><circle cx="40" cy="30" r="8" fill="#D4F20C" stroke="#0A1020" stroke-width="2"/></svg>
+            </div>
+            <h3>Water facts</h3>
+            <p>How much water each crop needs, how much comes from rain, the irrigation you must add, and the nearest river, canal or lake.</p>
+          </li>
+          <li class="card reveal">
+            <div class="card-media" aria-hidden="true">
+              <svg class="m-a" viewBox="0 0 160 100"><polyline points="10,70 40,60 70,66 100,44 130,48 150,30" fill="none" stroke="#2F4BFF" stroke-width="5" stroke-linejoin="round" stroke-linecap="round"/></svg>
+              <svg class="m-b" viewBox="0 0 160 100"><polyline points="10,70 40,60 70,66 100,44 130,48 150,30" fill="none" stroke="#2F4BFF" stroke-width="5" stroke-linejoin="round" stroke-linecap="round"/><path d="M10 72 L150 34" stroke="#0A1020" stroke-width="2.5" stroke-dasharray="6 5"/></svg>
+            </div>
+            <h3>20-year climate charts</h3>
+            <p>Rainfall, temperature and soil moisture for each of the last 20 years, with the trend and this year compared to normal.</p>
+          </li>
+          <li class="card reveal">
+            <div class="card-media" aria-hidden="true">
+              <svg class="m-a" viewBox="0 0 160 100"><path d="M40 78 L80 22 L120 78Z" fill="none" stroke="#2F4BFF" stroke-width="5" stroke-linejoin="round"/></svg>
+              <svg class="m-b" viewBox="0 0 160 100"><path d="M40 78 L80 22 L120 78Z" fill="#2F4BFF" fill-opacity="0.15" stroke="#2F4BFF" stroke-width="5" stroke-linejoin="round"/><path d="M60 70 L100 70" stroke="#d22a3d" stroke-width="6" stroke-linecap="round"/></svg>
+            </div>
+            <h3>Land check</h3>
+            <p>Before a field is saved, OpenStreetMap shows whether it covers water, a village, a road or other land that cannot be farmed.</p>
+          </li>
+          <li class="card reveal">
+            <div class="card-media" aria-hidden="true">
+              <svg class="m-a" viewBox="0 0 160 100"><text x="80" y="62" text-anchor="middle" font-family="Space Grotesk, sans-serif" font-weight="700" font-size="30" fill="#2F4BFF">EN</text></svg>
+              <svg class="m-b" viewBox="0 0 160 100"><text x="80" y="62" text-anchor="middle" font-family="Space Grotesk, sans-serif" font-weight="700" font-size="26" fill="#2F4BFF">EN RU TJ</text></svg>
+            </div>
+            <h3>Three languages</h3>
+            <p>The app speaks English, Russian and Tajik, and switches instantly without losing your map.</p>
+          </li>
+          <li class="card reveal">
+            <div class="card-media" aria-hidden="true">
+              <svg class="m-a" viewBox="0 0 160 100"><rect x="56" y="44" width="48" height="38" rx="6" fill="#2F4BFF"/><path d="M66 44V34a14 14 0 0 1 28 0v10" fill="none" stroke="#2F4BFF" stroke-width="6"/></svg>
+              <svg class="m-b" viewBox="0 0 160 100"><rect x="56" y="44" width="48" height="38" rx="6" fill="#2F4BFF"/><path d="M66 44V34a14 14 0 0 1 28 0" fill="none" stroke="#2F4BFF" stroke-width="6"/><circle cx="80" cy="62" r="6" fill="#D4F20C"/></svg>
+            </div>
+            <h3>Your fields, private</h3>
+            <p>Fields stay in your browser, or in a private account with only a username and password. Export them as GeoJSON at any time.</p>
+          </li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- ── 8. Data ── -->
+    <section class="dark sec" id="data" aria-labelledby="dataTitle">
+      <div class="wrap">
+        <p class="label reveal">The data</p>
+        <h2 class="h-xl" id="dataTitle" data-split>
+          <span class="line"><span>Real data,</span></span>
+          <span class="line"><span>plain words</span></span>
+        </h2>
+        <dl class="stats">
+          <div class="stat reveal"><dt><span class="count" data-count="20">20</span></dt><dd>years of monthly climate data for every field, from NASA POWER</dd></div>
+          <div class="stat reveal"><dt><span class="count" data-count="2">2</span></dt><dd>NASA data sources: POWER for climate and FIRMS for fires</dd></div>
+          <div class="stat reveal"><dt><span class="count" data-count="10">10</span></dt><dd>days of satellite fire detections around the field</dd></div>
+          <div class="stat reveal"><dt><span class="count" data-count="11">11</span></dt><dd>crops compared for each field by the crop advisor</dd></div>
+        </dl>
+        <ul class="sources">
+          <li class="reveal"><b>NASA POWER</b><span>Rain, temperature, soil moisture and humidity: 20 years of monthly values and the last 30 days, day by day.</span></li>
+          <li class="reveal"><b>NASA FIRMS</b><span>Fires seen by the MODIS and VIIRS satellite sensors in the last 10 days.</span></li>
+          <li class="reveal"><b>Weatherstack</b><span>The weather right now at the field: temperature, humidity, wind and rain.</span></li>
+          <li class="reveal"><b>IPstack</b><span>An approximate starting location, so the map opens near you.</span></li>
+          <li class="reveal"><b>OpenStreetMap</b><span>Rivers, canals, lakes, villages and roads for the land check and the nearest water.</span></li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- ── 9. Team ── -->
+    <section class="light sec" id="team" aria-labelledby="teamTitle">
+      <div class="wrap">
+        <p class="label reveal">Team ABF</p>
+        <h2 class="h-xl" id="teamTitle" data-split>
+          <span class="line"><span>Who built</span></span>
+          <span class="line"><span>Field Shift</span></span>
+        </h2>
+        <ul class="team">
+          <li class="person reveal"><span class="avatar" aria-hidden="true">AB</span><h3>Astanov Bunyod</h3><p>Designer and coder</p></li>
+          <li class="person reveal"><span class="avatar" aria-hidden="true">F</span><h3>Faruch</h3><p>Speaker</p></li>
+          <li class="person reveal"><span class="avatar avatar-ai" aria-hidden="true">AI</span><h3>Claude</h3><p>AI assistant by Anthropic, helped write the code</p></li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- ── 10. FAQ ── -->
+    <section class="dark sec" id="faq" aria-labelledby="faqTitle">
+      <div class="wrap faq-grid">
+        <div>
+          <p class="label reveal">Questions</p>
+          <h2 class="h-xl" id="faqTitle" data-split>
+            <span class="line"><span>Good to</span></span>
+            <span class="line"><span>know</span></span>
+          </h2>
+        </div>
+        <div class="faq">
+          <details class="reveal">
+            <summary>Where does the data come from?</summary>
+            <p>Climate history and recent weather come from NASA POWER, fire detections from NASA FIRMS (MODIS and VIIRS), the current weather from Weatherstack, your rough starting location from IPstack, and land, water and roads from OpenStreetMap. The app server fetches the data; your browser never sees the API keys.</p>
+          </details>
+          <details class="reveal">
+            <summary>Is the advice final?</summary>
+            <p>No. Field Shift is an advisory tool. Its risk levels and crop scores come from simple, open rules, and the disease thresholds are approximate. Confirm with a local agronomist before you decide.</p>
+          </details>
+          <details class="reveal">
+            <summary>Does it work on a phone?</summary>
+            <p>Yes. It runs in the phone's browser. The panels become sheets that slide up from the bottom, and the 3D map uses a lighter terrain detail to stay smooth.</p>
+          </details>
+          <details class="reveal">
+            <summary>Where are my fields saved?</summary>
+            <p>Without an account, in your own browser on this device. With a free private account (only a username and password, no email), on the Field Shift server, where only you can see them. You can export your fields as a GeoJSON file at any time.</p>
+          </details>
+          <details class="reveal">
+            <summary>Which languages does it speak?</summary>
+            <p>English, Russian and Tajik. The first visit follows your browser's language, and you can switch at any time in the top bar.</p>
+          </details>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── 11. Call to action ── -->
+    <section class="cta sec" aria-labelledby="ctaTitle">
+      <div class="wrap cta-inner">
+        <h2 class="h-xxl" id="ctaTitle" data-split>
+          <span class="line"><span>Plan your</span></span>
+          <span class="line"><span>next season</span></span>
+        </h2>
+        <a class="btn btn-lime btn-lg reveal" href="/map/" data-open-app><span>Open the app</span></a>
+        <p class="cta-note reveal">Free in your browser. Advisory tool: confirm with a local agronomist.</p>
+      </div>
     </section>
   </main>
 
-  <footer class="app-footer"><p data-i18n="sources">Data sources</p></footer>
+  <footer class="site-foot dark">
+    <div class="wrap foot-row">
+      <p class="foot-brand"><img src="/img/abf-mark.svg" alt="" width="28" height="28" /> ABF Field Shift</p>
+      <p>Built for the NASA Space Apps Challenge 2026 by team ABF. Not an official NASA product.</p>
+      <p class="foot-links"><a href="/map/" data-open-app>Open the app</a> <a href="#top">Back to top</a></p>
+    </div>
+  </footer>
 
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-  <script src="i18n.js"></script>
-  <script src="app.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js" defer></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/lenis@1.1.13/dist/lenis.min.js" defer></script>
+  <script src="/landing/landing.js" defer></script>
 </body>
 </html>
